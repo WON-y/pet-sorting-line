@@ -1,0 +1,5 @@
+# 실제 하드웨어로 실행할 때 추가 설치 (웹캠 판정, 손짓)
+-r requirements.txt
+ultralytics>=8.3
+opencv-python>=4.9
+mediapipe>=0.10

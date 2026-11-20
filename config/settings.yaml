@@ -1,0 +1,41 @@
+# 실험·시연 중 자주 바꾸는 값은 모두 여기에 둡니다. 코드에 숫자를 직접 쓰지 않습니다.
+# 키를 추가·변경하면 docs/spec/config.md 표도 같이 고칩니다.
+
+radio:
+  group: 37                 # micro:bit 라디오 그룹 (다른 팀과 겹치면 변경)
+
+serial:
+  gateway_port: ""          # 예: COM5, /dev/ttyACM0 (비우면 .env의 GATEWAY_PORT 사용)
+  arduino_port: ""          # 예: COM6, /dev/ttyACM1 (비우면 .env의 ARDUINO_PORT 사용)
+  baud: 115200
+
+mqtt:
+  host: localhost           # 노트북 app 기준. 도커 안에서는 mqtt
+  port: 1883
+  topic_prefix: pet
+
+vision:
+  camera_index: 0
+  weights: training/weights/best.pt
+  roi: null                 # [x1, y1, x2, y2] 판정 구역. 벨트 설치 후 정함. null이면 화면 전체
+  imgsz: 224
+  letterbox_color: [114, 114, 114]   # 전처리 코드의 회색 값과 반드시 같게
+  frames: 3                 # 연속 같은 클래스여야 확정
+  conf_threshold: 0.6       # 미만이면 재검사(RE)
+
+gesture:
+  enabled: false            # 노트북 MediaPipe 손짓 인식 (선택)
+  camera_index: 1           # 판정용 웹캠과 다른 카메라
+  confirm_frames: 10        # 같은 손짓이 연속으로 보여야 확정
+
+safety:                     # 우노·손 3 펌웨어에도 같은 값을 넣는다 (자동 동기화 아님)
+  warn_distance_cm: 40
+  stop_distance_cm: 20
+  heartbeat_period_ms: 200
+  heartbeat_timeout_ms: 1000
+  arm_valid_ms: 5000
+
+app:
+  ack_timeout_ms: 1500
+  sort_hold_ms: 1200        # 날개판을 연 채 유지하는 시간
+  state_publish_ms: 1000

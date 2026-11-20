@@ -1,0 +1,63 @@
+# CI: 코드를 올리거나 PR을 열 때마다 자동 검사 (docs/spec/conventions.md 6절)
+# 하드웨어 동작(손·벨트·정지)은 여기서 시험할 수 없다 → docs/tests/kpi_log.md에 직접 기록
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python:
+    name: 파이썬 스타일·시험
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: 설치
+        run: |
+          pip install -r requirements-dev.txt
+          pip install -r dashboard/requirements.txt httpx
+      - name: 스타일 검사 (ruff)
+        run: ruff check .
+      - name: 시험 (pytest, 하드웨어 없이)
+        run: pytest -q
+      - name: 모의 실행 10초 (브로커 없이도 멈추지 않는지)
+        run: python -m app --mock --duration 10
+
+  arduino:
+    name: 아두이노 컴파일
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/compile-sketches@v1
+        with:
+          fqbn: arduino:avr:uno
+          sketch-paths: |
+            - safety/belt_controller
+
+  docker:
+    name: 도커 빌드·연동 시험
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 이미지 빌드
+        run: docker compose --profile mock build
+      - name: mqtt + dashboard + simulator 실행
+        run: docker compose --profile mock up -d
+      - name: 대시보드에 모의 판정이 쌓이는지 확인
+        run: |
+          for i in $(seq 1 30); do
+            total=$(curl -sf localhost:8000/api/summary | python3 -c "import sys,json;print(json.load(sys.stdin)['total'])" || echo 0)
+            echo "판정 수: $total"
+            if [ "$total" -ge 2 ]; then exit 0; fi
+            sleep 2
+          done
+          docker compose --profile mock logs
+          exit 1
+      - name: 정리
+        if: always()
+        run: docker compose --profile mock down -v

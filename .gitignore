@@ -1,0 +1,24 @@
+# 환경·비밀
+.env
+# 파이썬
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+# 기록·학습 산출물
+data/logs/*
+!data/logs/.gitkeep
+runs/
+training/dataset/
+training/raw/
+*.mp4
+*.mov
+# 개인정보 문서
+*신청서*
+*.hwpx
+# OS·에디터
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json

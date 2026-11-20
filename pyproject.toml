@@ -1,0 +1,17 @@
+[project]
+name = "pet-sorting-line"
+version = "0.1.0"
+description = "투명 페트병 선별 라인의 신호 전달과 안전 (3팀)"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = ["training/*.ipynb"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B"]

@@ -1,0 +1,6 @@
+.git
+data
+training
+docs
+**/__pycache__
+.env

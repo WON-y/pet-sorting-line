@@ -1,0 +1,33 @@
+# docker compose up -d                 : mqtt + dashboard
+# docker compose --profile mock up     : + 하드웨어 없는 모의 실행
+# 각 컨테이너 설명은 해당 폴더의 CONTAINER.md
+services:
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: pet-mqtt
+    ports: ["1883:1883"]
+    volumes:
+      - ./infra/mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    restart: unless-stopped
+
+  dashboard:
+    build: { context: ., dockerfile: dashboard/Dockerfile }
+    container_name: pet-dashboard
+    ports: ["8000:8000"]
+    environment:
+      MQTT_HOST: mqtt
+      MQTT_PORT: 1883
+      DB_PATH: /data/pet.db
+    volumes:
+      - ./data/logs:/data            # 기록은 컨테이너 밖에 남는다
+    depends_on: [mqtt]
+    restart: unless-stopped
+
+  simulator:
+    build: { context: ., dockerfile: app/Dockerfile }
+    container_name: pet-simulator
+    environment:
+      MQTT_HOST: mqtt
+      MQTT_PORT: 1883
+    depends_on: [mqtt, dashboard]
+    profiles: ["mock"]
