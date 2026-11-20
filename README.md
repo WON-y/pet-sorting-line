@@ -6,14 +6,14 @@ AI가 컨베이어 위 페트병을 배출 기준대로 판정하고(투명 적�
 
 ## 기능 구성
 
-| 기능 | 내용 | 폴더 |
-| --- | --- | --- |
-| 하드웨어 제어 | 작업 손 날개판 분기, 신호 손 표시 | `hardware/` |
-| 안전 | 벨트 구동, IR 커튼, 하트비트, 리셋 | `safety/` |
-| 비전 | 페트병 판정(YOLO), 숫자 카드(WonderCam), 손짓(MediaPipe) | `vision/` |
-| 통신 | micro:bit 라디오 게이트웨이, 시리얼·MQTT 연결 | `communication/` |
-| 통합 실행 | 노트북 상태 머신, 모의 모드 | `app/` |
-| 웹 대시보드 | 통별 개수, 재검사, 정지·아차사고 기록 | `dashboard/` |
+| 기능          | 내용                                                     | 폴더               |
+| ------------- | -------------------------------------------------------- | ------------------ |
+| 하드웨어 제어 | 작업 손 날개판 분기, 신호 손 표시                        | `hardware/`      |
+| 안전          | 벨트 구동, IR 커튼, 하트비트, 리셋                       | `safety/`        |
+| 비전          | 페트병 판정(YOLO), 숫자 카드(WonderCam), 손짓(MediaPipe) | `vision/`        |
+| 통신          | micro:bit 라디오 게이트웨이, 시리얼·MQTT 연결           | `communication/` |
+| 통합 실행     | 노트북 상태 머신, 모의 모드                              | `app/`           |
+| 웹 대시보드   | 통별 개수, 재검사, 정지·아차사고 기록                   | `dashboard/`     |
 
 자세한 구조는 [`docs/spec/architecture.md`](docs/spec/architecture.md), 요구사항은 [`docs/PRD.md`](docs/PRD.md).
 
@@ -35,22 +35,13 @@ python -m app            # .env에 GATEWAY_PORT, ARDUINO_PORT 설정
 
 ## 규격 문서 (작업 전에 읽기)
 
-| 문서 | 내용 |
-| --- | --- |
-| [safety_rules.md](docs/spec/safety_rules.md) | 안전 규칙 (최우선) |
-| [protocol.md](docs/spec/protocol.md) | 라디오·시리얼·핀·MQTT·API 메시지 |
+| 문서                                                | 내용                                        |
+| --------------------------------------------------- | ------------------------------------------- |
+| [safety_rules.md](docs/spec/safety_rules.md)         | 안전 규칙 (최우선)                          |
+| [protocol.md](docs/spec/protocol.md)                 | 라디오·시리얼·핀·MQTT·API 메시지        |
 | [modes_and_states.md](docs/spec/modes_and_states.md) | 운전 모드, 우선순위, 판정 클래스, 상태 머신 |
-| [data_and_logging.md](docs/spec/data_and_logging.md) | DB, manifest, 전처리 규칙 |
-| [config.md](docs/spec/config.md) | 설정 키 |
-| [conventions.md](docs/spec/conventions.md) | 코딩·Git 규칙 |
+| [data_and_logging.md](docs/spec/data_and_logging.md) | DB, manifest, 전처리 규칙                   |
+| [config.md](docs/spec/config.md)                     | 설정 키                                     |
+| [conventions.md](docs/spec/conventions.md)           | 코딩·Git 규칙                              |
 
 AI 도구(Claude 등)로 작업할 때는 [`CLAUDE.md`](CLAUDE.md)를 먼저 읽게 하세요.
-
-## 팀
-
-| 파트 | 담당 | 폴더 |
-| --- | --- | --- |
-| P1 PM·비전 | 이채원 (산업공학과) | `vision/bottle`, `training`, `docs` |
-| P2 기구·선별 손 | (팀 회의) | `hardware/hand1_sorter`, `hand2_sorter` |
-| P3 안전·구동 | (팀 회의) | `safety`, `hardware/hand3_signal` |
-| P4 통신·대시보드 | (팀 회의) | `communication`, `app`, `dashboard` |
