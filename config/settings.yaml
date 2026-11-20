@@ -20,7 +20,7 @@ vision:
   roi: null                 # [x1, y1, x2, y2] 판정 구역. 벨트 설치 후 정함. null이면 화면 전체
   imgsz: 224
   letterbox_color: [114, 114, 114]   # 전처리 코드의 회색 값과 반드시 같게
-  frames: 3                 # 연속 같은 클래스여야 확정
+  frames: 1                 # 벨트가 멈춘 뒤 1프레임 판정 (흔들림 없음)
   conf_threshold: 0.6       # 미만이면 재검사(RE)
 
 gesture:

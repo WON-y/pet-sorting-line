@@ -20,7 +20,7 @@
 | `vision.weights` | training/weights/best.pt | vision/bottle | |
 | `vision.roi` | null | vision/bottle, training | 판정 구역 [x1,y1,x2,y2] |
 | `vision.letterbox_color` | [114,114,114] | vision/bottle, training | 학습 전처리와 같아야 함 |
-| `vision.frames` | 3 | vision/bottle | 확정 프레임 수 |
+| `vision.frames` | 1 | vision/bottle | 판정 프레임 수 (벨트 정지 후 1프레임) |
 | `vision.conf_threshold` | 0.6 | vision/bottle | 재검사 기준 |
 | `gesture.*` | | vision/gesture | 손짓 인식 |
 | `safety.warn_distance_cm` | 40 | 손 3 | 접근 경고 거리 |

@@ -48,6 +48,10 @@ def test_class_codes_and_hands():
     assert p.CLASS_TO_CODE["clear_nolabel"] == "OK"
     assert p.CLASS_TO_CODE["clear_label"] == "NG"
     assert p.CLASS_TO_CODE["color_label"] == "CO"
+    # 4클래스·2단계 분기 (modes_and_states.md 4절): 내용물 클래스 없음
+    assert set(p.CLASS_TO_CODE) == {"clear_nolabel", "clear_label", "color_nolabel", "color_label"}
+    assert p.CLASS_TO_CODE["color_nolabel"] == "CO"
+    assert p.CODE_TO_HAND["CO"] == 1 and p.CODE_TO_HAND["NG"] == 2 and p.CODE_TO_HAND["RE"] == 2
     assert p.CODE_TO_HAND == {"OK": None, "CO": 1, "NG": 2, "RE": 2}
 
 
