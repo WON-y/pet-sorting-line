@@ -16,12 +16,15 @@
 | `serial.arduino_port` | "" | app | 우노 시리얼 포트 (`ARDUINO_PORT`) |
 | `serial.baud` | 115200 | app, 펌웨어 | |
 | `mqtt.host` / `mqtt.port` | localhost / 1883 | app | 도커 안에서는 `MQTT_HOST=mqtt` |
-| `vision.camera_index` | 0 | vision/bottle | |
+| `vision.camera_index` | 1 | vision/bottle, vision/webtest | 판정용 USB 웹캠 번호 (노트북마다 다를 수 있음) |
 | `vision.weights` | training/weights/best.pt | vision/bottle | |
 | `vision.roi` | null | vision/bottle, training | 판정 구역 [x1,y1,x2,y2] |
 | `vision.letterbox_color` | [114,114,114] | vision/bottle, training | 학습 전처리와 같아야 함 |
 | `vision.frames` | 1 | vision/bottle | 판정 프레임 수 (벨트 정지 후 1프레임) |
 | `vision.conf_threshold` | 0.6 | vision/bottle | 재검사 기준 |
+| `webtest.port` | 8100 | vision/webtest | 카메라 인식 웹 테스트 포트 |
+| `webtest.interval_ms` | 500 | vision/webtest | 자동 인식 간격 |
+| `webtest.fallback_model` | yolo11n-cls.pt | vision/webtest | 학습 가중치가 없을 때 쓰는 기본 분류 모델 |
 | `gesture.*` | | vision/gesture | 손짓 인식 |
 | `safety.warn_distance_cm` | 40 | 손 3 | 접근 경고 거리 |
 | `safety.stop_distance_cm` | 20 | 손 3 | 위험 정지 거리 |

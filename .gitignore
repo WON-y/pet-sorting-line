@@ -10,6 +10,8 @@ __pycache__/
 data/logs/*
 !data/logs/.gitkeep
 runs/
+data/certs/
+/yolo*-cls.pt
 training/dataset/
 training/raw/
 *.mp4
