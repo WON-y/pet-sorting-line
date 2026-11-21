@@ -40,11 +40,10 @@ def effective_state(mode: Mode, danger: Danger) -> str:
     return "AUTO"
 
 
-# ---------- 판정 (modes_and_states.md 4절) ----------
+# ---------- 판정 (modes_and_states.md 4절, 4클래스·2단계 분기) ----------
 CLASS_TO_CODE = {
     "clear_nolabel": "OK",
     "clear_label": "NG",
-    "clear_content": "NG",
     "color_nolabel": "CO",
     "color_label": "CO",
 }

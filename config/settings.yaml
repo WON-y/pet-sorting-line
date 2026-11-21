@@ -15,17 +15,22 @@ mqtt:
   topic_prefix: pet
 
 vision:
-  camera_index: 0
+  camera_index: 1           # USB 웹캠 (0번은 노트북 내장 카메라)
   weights: training/weights/best.pt
   roi: null                 # [x1, y1, x2, y2] 판정 구역. 벨트 설치 후 정함. null이면 화면 전체
   imgsz: 224
   letterbox_color: [114, 114, 114]   # 전처리 코드의 회색 값과 반드시 같게
-  frames: 3                 # 연속 같은 클래스여야 확정
+  frames: 1                 # 벨트가 멈춘 뒤 1프레임 판정 (흔들림 없음)
   conf_threshold: 0.6       # 미만이면 재검사(RE)
+
+webtest:                    # 휴대폰·웹캠 사진 인식 웹 테스트 (vision/webtest, 시험용)
+  port: 8100                # 대시보드(8000)와 겹치지 않게
+  interval_ms: 500          # '자동 인식' 켰을 때 사진 보내는 간격
+  fallback_model: yolo11n-cls.pt   # vision.weights가 없을 때 쓰는 기본 분류 모델 (처음 한 번 자동 다운로드)
 
 gesture:
   enabled: false            # 노트북 MediaPipe 손짓 인식 (선택)
-  camera_index: 1           # 판정용 웹캠과 다른 카메라
+  camera_index: 0           # 판정용 웹캠(vision.camera_index)과 다른 카메라
   confirm_frames: 10        # 같은 손짓이 연속으로 보여야 확정
 
 safety:                     # 우노·손 3 펌웨어에도 같은 값을 넣는다 (자동 동기화 아님)

@@ -14,7 +14,7 @@
 
 ## 병 한 개의 흐름
 
-`EVT,ARRIVE` → capture → 3프레임 판정 → `pet/judgment` 발행 → (OK면 바로 `GO`) / (CO·NG·RE면 `TX:J<id>,<code>` → ACK → DONE → `GO`)
+`EVT,ARRIVE` → capture → 1프레임 판정 → `pet/judgment` 발행 → (OK면 바로 `GO`) / (CO·NG·RE면 `TX:J<id>,<code>` → ACK → DONE → `GO`)
 
 ## 할 일
 

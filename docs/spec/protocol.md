@@ -52,8 +52,8 @@
 | code | 뜻 | 동작하는 손 |
 | --- | --- | --- |
 | `OK` | 투명 적합 | 없음 (벨트 끝 통) |
-| `CO` | 유색·불투명 (기타) | 손 1 |
-| `NG` | 부적합 (라벨·내용물) | 손 2 |
+| `CO` | 유색·불투명 (기타, 라벨 무관) — 1단계 | 손 1 |
+| `NG` | 부적합 (투명·라벨 있음) — 2단계 | 손 2 |
 | `RE` | 재검사 | 손 2 |
 
 손 상태 `<state>`: `RDY`(대기), `OPEN`(날개판 닫음=분기 자세), `DONE`(복귀 완료), `SAFE`(안전 자세), `ERR`.
@@ -112,7 +112,7 @@
 
 | 토픽 | 언제 | payload 예 |
 | --- | --- | --- |
-| `pet/judgment` | 병 판정 확정 | `{"ts":"2026-11-20T14:03:05+09:00","src":"app","id":12,"cls":"clear_label","code":"NG","conf":0.93,"frames":3}` |
+| `pet/judgment` | 병 판정 확정 | `{"ts":"2026-11-20T14:03:05+09:00","src":"app","id":12,"cls":"clear_label","code":"NG","conf":0.93,"frames":1}` |
 | `pet/sort` | 손이 분기 완료 | `{"ts":...,"id":12,"hand":2,"result":"DONE"}` |
 | `pet/mode` | 운전 모드 변경 | `{"ts":...,"mode":2,"by":"card"}` (by: `card`/`gesture`/`system`) |
 | `pet/safety` | 경고·정지·재가동 | `{"ts":...,"level":2,"event":"STOP","cause":"IR"}` (event: `WARN` 접근 경고, `STOP` 정지, `RUN` 재가동, `CLEAR` 경고 해제, `ERROR` 손 응답 없음 등) |

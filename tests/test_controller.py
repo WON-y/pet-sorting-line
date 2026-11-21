@@ -10,7 +10,7 @@ def kinds(acts, kind):
 def test_ok_bottle_goes_straight_through():
     c = LineController()
     assert c.on_arduino(("EVT", "ARRIVE"), 0) == [("capture", 0)]
-    acts = c.on_decision("clear_nolabel", "OK", 0.95, 3, 10)
+    acts = c.on_decision("clear_nolabel", "OK", 0.95, 1, 10)
     assert ("arduino", "GO") in acts
     assert not kinds(acts, "gateway")          # 적합은 손이 안 움직임
     assert c.state == "IDLE"
