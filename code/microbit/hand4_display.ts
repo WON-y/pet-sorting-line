@@ -49,10 +49,12 @@ function fingers(t: boolean, i: boolean, m: boolean, r: boolean, p: boolean, ms:
     servo(5, p ? OPEN_FINGER : CLOSE_FINGER, ms)
 }
 
+// 손 3과 같은 자세 (작업자 수신호를 그대로 따라 함)
 function poseForMode(m: number) {
-    if (m == 1) fingers(true, true, true, true, true, 400)
-    else if (m == 2) fingers(false, true, true, false, false, 400)
-    else fingers(false, false, false, false, false, 400)
+    if (m == 1) fingers(false, false, true, true, true, 400)        // OK 사인 (엄지·검지 접고 3·4·5 폄)
+    else if (m == 2) fingers(false, true, true, false, false, 400)  // 손가락 2개 (V)
+    else if (m == 4) fingers(true, true, true, true, true, 400)     // 손바닥 활짝
+    else fingers(false, false, false, false, false, 400)            // 주먹 (3, 신호 끊김)
     servo(6, m == 4 ? WRIST_LOCK : WRIST_CENTER, 500)
 }
 

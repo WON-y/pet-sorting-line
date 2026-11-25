@@ -9,14 +9,14 @@
 
 - 청년 피지컬 AI 과정 3팀 팀 프로젝트. 제출 2026-12-07, 최종 발표 2026-12-10.
 - Hiwonder AiHand(micro:bit V2 + 확장보드, 서보 6개) 4대와 아두이노 컨베이어로 만드는 탁상용 **투명 페트병 선별 셀**.
-- 노트북 YOLO가 병을 판정하면, 손 1·2가 손목에 고정된 날개판을 돌려 병을 분기한다. 손 3은 숫자 카드로 라인 모드를 정하고, 손 4는 떨어진 곳에서 상태를 보여 준다.
+- 노트북 YOLO가 병을 판정하면, 손 1·2가 손목에 고정된 날개판을 돌려 병을 분기한다. 손 3은 작업자 수신호(WonderCam 특징 학습, 숫자 카드로 전환 가능)로 라인 모드를 정하고, 손 4는 떨어진 곳에서 상태를 보여 준다.
 
 ## 2. 파일 지도
 
 | 파일 | 대상 기기 | 한 줄 요약 |
 |---|---|---|
 | `microbit/hand12_sorter.ts` | 손 1, 손 2 (`HAND_ID`로 구분) | 판정에 따라 손목(6번 서보)으로 날개판 각도 변경 |
-| `microbit/hand3_signal.ts` | 손 3 (WonderCam + 초음파) | 숫자 카드 → 모드 결정·전송, 접근 감지, 손가락 복창. **모드의 기준** |
+| `microbit/hand3_signal.ts` | 손 3 (WonderCam + 초음파) | 수신호(또는 숫자 카드) → 모드 결정·전송, 접근 감지, 손가락 복창. **모드의 기준** |
 | `microbit/hand4_display.ts` | 손 4 | 무선으로 받은 모드·위험·도움 요청 표시 |
 | `microbit/gateway_bridge.ts` | 확장보드 없는 micro:bit (노트북 USB) | 노트북 판정 → 무선, 무선 모드 → 아두이노 핀 |
 | `arduino/conveyor/conveyor.ino` | 아두이노 우노 + TB6600 | 모드대로 벨트 속도, 안전 정지·잠김·리셋 |
@@ -33,6 +33,9 @@
   - 손 4: 원격 표시
 - **숫자 카드 모드표** (팀에서 만든 표 그대로 구현)
   - 1 자동, 2 저속, 3 일시 정지, 4 점검 잠금, 5 도움 요청
+- **손 3 입력 = 수신호 (2026-11-25, aihand-factory T7 v3을 옮김)**: WonderCam 특징 학습 ID 1 OK 사인, 2 V, 3 주먹, 4 손바닥 활짝, 5 빈 배경(6·7 사람만 서 있음 = 없음). 번호는 카드 모드표와 같다. 도움 요청은 카드 5(로고 길게 눌러 숫자 카드 입력으로 전환) 또는 로고 터치. 수신호는 **모드만** 바꾼다. 날개판 분기 각도는 계속 YOLO 판정이 정한다.
+  - 올라가기(→자동·저속): 3초 유지 80% → 접근 위험 0 → 3초 예고 → 모드 변경. 내려가기·정지 약 0.5초, 잠금 약 1초.
+  - 손 3·4 복창 자세는 사람 수신호를 따라 한다: 1 OK 사인(3·4·5번 폄), 2 V, 3 주먹, 4 활짝 + 손목.
   - 모드별 벨트, LED, 손 동작은 `README.md` 5.1절 참고
 - **노트북 사용 허용**: YOLO, 대시보드 등 노트북 프로그램은 모두 써도 된다. 단, 노트북은 정지 경로에 넣지 않는다 (아래 6절).
 
@@ -52,6 +55,7 @@
 |---|---|
 | `conveyor.ino` | `arduino-cli compile --fqbn arduino:avr:uno`로 컴파일 성공 (프로그램 공간 약 25%). 실물 미시험 |
 | micro:bit `.ts` 4개 | **컴파일도 실물 시험도 안 됨.** 확장 소스를 직접 읽고 API를 대조해 작성함 |
+| 손 3 수신호 인식 | 같은 규칙의 T7 프로그램은 실물 시험함(11/21, 확정 81%, 오확정 5/26). 이 파일로 합친 뒤에는 미시험. `TouchButtonEvent.LongPressed`(입력 전환)도 미확인 |
 | 각도·거리·속도 값 | 전부 임시값 (코드의 ★ 표시). 실물 보정 필요 |
 
 - micro:bit 코드를 처음 MakeCode에 붙여넣을 때 오류가 나면, 그게 첫 번째 확인 결과다.
@@ -72,6 +76,7 @@
 | 모드 → 핀 비트 (자동 01, 저속 10, 정지 00, 잠금 11) | `gateway_bridge.ts`(`writeModePins`), `conveyor.ino`(`Mode` enum), README |
 | 신호 끊김 시간 (손 2000ms, 게이트웨이 1500ms, 아두이노 600ms) | 각 파일. 손 3의 0.3초 전송 주기와 게이트웨이의 0.1초 토글보다 충분히 길게 둘 것 |
 | 손가락 자세·`WRIST_LOCK` | `hand3_signal.ts`와 `hand4_display.ts`는 같은 자세를 보여야 함 |
+| 수신호 ID ↔ 모드 번호 | `hand3_signal.ts`(`readOnce`, `EMPTY_ID`), WonderCam 본체 학습, README 5.1·6.2 |
 
 ### 6.2 안전 동작을 약하게 만들지 말 것
 
@@ -110,11 +115,13 @@
   - `wondercam.wondercam_init(wondercam.DEV_ADDR.x32)`: 카메라가 없으면 화면에 "E"를 띄우며 **영원히 기다린다**.
   - `wondercam.ChangeFunc(wondercam.Functions.NumberRecognition)`
   - 매번 `wondercam.UpdateResult()`를 부른 뒤 `NumberWithMaxConfidence()`(1~5), `MaxConfidenceOfNumber()`(0~1)를 읽는다.
+  - 특징 학습: `ChangeFunc(wondercam.Functions.FeatureLearning)`, `FlMaxConfidenceID()`, `FlMaxConfidence()` (T7에서 실물 사용). 학습은 WonderCam 본체에서 한다.
 - 확장 소스: https://github.com/Hiwonder/StartbitV2 · https://github.com/Hiwonder/WonderCam · https://github.com/Hiwonder/RGBSonar
 
 ## 8. 남은 일 (우선순위 순)
 
 1. **MakeCode 붙여넣기 확인**: 4개 `.ts`가 오류 없이 들어가는지 본다.
+1. **손 3 수신호 시험**: 카메라를 작업대 위에 고정해 ID 1~5 학습 → 수신호 1~4로 모드가 바뀌고 손 4가 따라 하는지, 로고 길게 누르기로 카드 입력으로 바뀌는지 본다.
 2. **손 1 실물 시험과 날개판 각도 보정**: 일시 정지 상태에서 A(비스듬히)·B(나란히) 버튼으로 `WRIST_PARALLEL` / `WRIST_DIVERT`를 맞춘다. 손목을 돌렸을 때 날개판이 벨트 위에서 수평으로 도는지 먼저 확인한다.
 3. **손 3 접근 거리 보정**: 초음파와 카드 인식 방향을 다르게 배치한다. 같은 방향이면 카드를 내밀 때마다 정지가 걸린다.
 4. **YOLO → 게이트웨이 연결**: 병 하나당 `J0`~`J4` 한 줄을 115200bps로 보낸다. 3프레임 연속 같은 결과일 때 확정하고, 신뢰도 0.6 미만은 `J0`(재검사)으로 보낸다.
