@@ -7,8 +7,8 @@
 | --- | --- |
 | `pet_cls_train.ipynb` | 학습 노트북 (실험 A/B, 클래스별 평가, 판정 함수) |
 | `manifest.csv` | 정답 기준표 (열 정의: `docs/spec/data_and_logging.md` 3절) — 팀이 채움 |
-| `weights/color_best.pt` | **색 모델** 가중치 (clear / color) — 아직 없음, 학습 후 넣기 |
-| `weights/label_best.pt` | **라벨 모델** 가중치 (label / nolabel) — 아직 없음, 학습 후 넣기 |
+| `weights/color_best.pt` | **색 모델** 가중치 (clear / color), 2026-11-28 첫 학습본 |
+| `weights/label_best.pt` | **라벨 모델** 가중치 (label / nolabel), 2026-11-28 첫 학습본 |
 | `weights/best.pt` | 예전 4클래스 모델 (비교용, `vision.model_mode: single`) |
 
 ## 두 모델로 나눠 학습 (2026-11-26)

@@ -55,6 +55,7 @@ python -m app --phone                  # 웹캠 대신 휴대폰 카메라 (대�
 
 ## 할 일
 
-- [ ] 날개판 분기: 게이트웨이(`code/microbit/gateway_bridge.ts`)와 판정 메시지 형식 통일 후 `app.sorting: true`
+- [x] 게이트웨이(`code/microbit/gateway_bridge.ts`)와 메시지 형식 통일 (2026-11-28, `J0`~`J4` → `ACK,순번,판정`)
+- [ ] 실제 게이트웨이·손 1·2로 분기 시험 후 `app.sorting: true` (`--mock`에서는 `MockGateway`로 흐름 확인됨)
 - [ ] 손짓(gesture) 카메라를 루프에 연결
 - [ ] Supabase 저장 클래스 (`dashboard/app/store.py`와 같은 메서드)

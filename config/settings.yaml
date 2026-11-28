@@ -2,7 +2,7 @@
 # 키를 추가·변경하면 docs/spec/config.md 표도 같이 고칩니다.
 
 radio:
-  group: 37                 # micro:bit 라디오 그룹 (다른 팀과 겹치면 변경)
+  group: 73                 # micro:bit 라디오 그룹. code/microbit 손 4대·게이트웨이 RADIO_GROUP과 같게 (다른 팀과 겹치면 모두 변경)
 
 serial:
   gateway_port: ""          # 예: COM5, /dev/ttyACM0 (비우면 .env의 GATEWAY_PORT 사용)
@@ -67,7 +67,7 @@ safety:                     # 우노·손 3 펌웨어에도 같은 값을 넣는
 
 app:
   record: local             # local: 노트북 하나에서 SQLite에 바로 기록 / mqtt: 도커 대시보드로 MQTT 발행 (환경 변수 RECORD)
-  sorting: false            # true: 판정을 게이트웨이로 보내 손 1·2가 분기 (아직 형식 통일 전이라 끔)
+  sorting: false            # true: 판정을 게이트웨이로 보내 손 1·2가 분기 (실제 손으로 시험하기 전이라 끔)
   settle_ms: 400            # 벨트를 멈춘 뒤 사진을 찍기까지 기다리는 시간 (흔들림 방지)
   resume_delay_ms: 2000     # 판정 뒤 벨트를 자동으로 다시 출발시키기까지 시간
   ack_timeout_ms: 1500

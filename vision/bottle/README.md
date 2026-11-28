@@ -4,7 +4,7 @@
 - 카메라: USB 웹캠 Coms TB591 (1080p, LED 조명 내장), 클램프 스탠드 + 매직암으로 벨트 위 30~40cm에 고정, 수직으로 내려찍음
 - 모델: Ultralytics YOLO 분류 모델(사진 전체 분류, 탐지 아님), 입력 224×224. 여러 모델을 비교해 고른다 → `training/README.md`
 - 모델 2개: **색 모델**(clear/color) + **라벨 모델**(label/nolabel) → 합쳐서 4클래스 (`classifier.py`의 `combine`)
-- 가중치: `training/weights/color_best.pt`, `label_best.pt` (`settings.yaml: vision.color_model`, `vision.label_model`). 아직 없으면 모두 재검사(RE). 예전 4클래스 `best.pt`는 `vision.model_mode: single`
+- 가중치: `training/weights/color_best.pt`, `label_best.pt` (`settings.yaml: vision.color_model`, `vision.label_model`). 파일이 없으면 모두 재검사(RE). 예전 4클래스 `best.pt`는 `vision.model_mode: single`
 - WonderCam에는 직접 학습한 모델을 올릴 방법이 문서에 없어, 판정은 노트북에서 한다.
 
 ## 흐름

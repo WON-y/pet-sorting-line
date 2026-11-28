@@ -52,19 +52,19 @@ def build(cfg: dict, mock: bool, video: str | None = None, web: bool = True,
         if not mock:
             log.warning("우노 포트가 없어 가상 벨트로 실행합니다 (대시보드 '시험' 버튼으로 조작)")
 
-    # 게이트웨이: 분기(sorting)를 켤 때만
+    # 게이트웨이: 포트가 있으면 연결해 손 3 모드·위험·도움 요청을 기록. 판정은 sorting일 때만 보냄
     gateway = None
-    if ctl.sorting:
-        if mock:
-            from app.mock import MockHands
+    if mock:
+        if ctl.sorting:
+            from app.mock import MockGateway
 
-            hands = MockHands()
-            gateway = hands.link
-            helpers.append(hands)
-        elif scfg.get("gateway_port"):
-            from communication.serial_bridge.links import SerialLink
+            gw = MockGateway()
+            gateway = gw.link
+            helpers.append(gw)
+    elif scfg.get("gateway_port"):
+        from communication.serial_bridge.links import SerialLink
 
-            gateway = SerialLink(scfg["gateway_port"], scfg["baud"])
+        gateway = SerialLink(scfg["gateway_port"], scfg["baud"])
 
     # 영상
     if mock:

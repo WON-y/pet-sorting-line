@@ -9,16 +9,16 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import IntEnum
 
-RADIO_MAX_LEN = 19
 KST = timezone(timedelta(hours=9))
 
 
 # ---------- 운전 모드·안전 단계 (modes_and_states.md 1~3절) ----------
 class Mode(IntEnum):
+    """손 3이 라디오 `mode`로 보내는 번호 = 수신호·카드 번호. 도움 요청은 모드가 아니다(`help`)."""
     AUTO = 1
     SLOW = 2
+    PAUSE = 3     # 일시 정지 (모드 핀 00, 우노 잠김)
     LOCKOUT = 4
-    HELP = 5  # 선택 S1
 
 
 class Danger(IntEnum):
@@ -28,11 +28,13 @@ class Danger(IntEnum):
 
 
 def effective_state(mode: Mode, danger: Danger) -> str:
-    """우선순위: 위험 정지 > 점검 잠금 > 접근 경고 > 저속 > 자동."""
+    """우선순위: 위험 정지 > 점검 잠금 > 일시 정지 > 접근 경고 > 저속 > 자동."""
     if danger == Danger.STOP:
         return "STOP"
     if mode == Mode.LOCKOUT:
         return "LOCKOUT"
+    if mode == Mode.PAUSE:
+        return "PAUSE"
     if danger == Danger.WARN:
         return "WARN"
     if mode == Mode.SLOW:
@@ -50,80 +52,58 @@ CLASS_TO_CODE = {
 RECHECK = "RE"
 CODES = ("OK", "CO", "NG", "RE")
 CODE_TO_HAND = {"OK": None, "CO": 1, "NG": 2, "RE": 2}
-HAND_STATES = ("RDY", "OPEN", "DONE", "SAFE", "ERR")
+
+# 판정 번호 (protocol.md 1절). 게이트웨이 시리얼 J0~J4, 라디오 jdg 값의 끝자리, 손 1·2 분기 규칙에 쓰인다.
+# 2(내용물 남음)는 손 2 코드에는 있지만 지금 모델에 없는 클래스라 노트북은 보내지 않는다.
+CODE_TO_JDG = {"RE": 0, "OK": 1, "NG": 3, "CO": 4}
+JDG_TO_CODE = {v: k for k, v in CODE_TO_JDG.items()}
 
 
-# ---------- 라디오 메시지 (protocol.md 1절) ----------
-def _check(msg: str) -> str:
-    if len(msg) > RADIO_MAX_LEN:
-        raise ValueError(f"라디오 메시지는 {RADIO_MAX_LEN}자 이내: {msg!r}")
-    return msg
+# ---------- 라디오 (protocol.md 1절) ----------
+# micro:bit radio.sendValue(이름, 숫자). 노트북은 라디오를 직접 쓰지 않고 게이트웨이 시리얼로만 본다.
+RADIO_NAMES = ("mode", "help", "dng", "jdg")
 
 
-def encode_mode(mode: Mode | int) -> str:
-    return _check(f"M{int(Mode(mode))}")
-
-
-def encode_danger(level: Danger | int) -> str:
-    return _check(f"D{int(Danger(level))}")
-
-
-def encode_judgment(bottle_id: int, code: str) -> str:
-    if code not in CODES:
-        raise ValueError(f"판정 코드는 {CODES} 중 하나: {code!r}")
-    return _check(f"J{bottle_id % 1000},{code}")
-
-
-def encode_heartbeat(seq: int) -> str:
-    return _check(f"HB3,{seq % 100}")
-
-
-@dataclass(frozen=True)
-class RadioMsg:
-    kind: str            # MODE, DANGER, JUDGMENT, HEARTBEAT, HAND, ACK
-    a: int | None = None  # 모드 번호, 단계, 병 id, seq, 손 번호
-    b: str | None = None  # 판정 코드, 손 상태, ACK 병 id(문자열)
-
-
-def parse_radio(msg: str) -> RadioMsg | None:
-    """모르는 메시지는 None (규격: 무시)."""
-    msg = msg.strip()
-    try:
-        if len(msg) == 2 and msg[0] == "M" and msg[1].isdigit():
-            return RadioMsg("MODE", int(Mode(int(msg[1]))))
-        if len(msg) == 2 and msg[0] == "D" and msg[1].isdigit():
-            return RadioMsg("DANGER", int(Danger(int(msg[1]))))
-        if msg.startswith("HB3,"):
-            return RadioMsg("HEARTBEAT", int(msg[4:]))
-        if msg.startswith("ACK"):
-            hand, bid = msg[3:].split(",")
-            return RadioMsg("ACK", int(hand), bid)
-        if msg[0] == "J":
-            bid, code = msg[1:].split(",")
-            if code in CODES:
-                return RadioMsg("JUDGMENT", int(bid), code)
-        if msg[0] == "H" and msg[1].isdigit():
-            hand, state = msg[1:].split(",")
-            if state in HAND_STATES:
-                return RadioMsg("HAND", int(hand), state)
-    except (ValueError, IndexError):
-        return None
-    return None
+def jdg_value(seq: int, code: str) -> int:
+    """라디오 jdg 값 = 순번 × 10 + 판정 번호 (게이트웨이가 만든다. 모의·시험용)."""
+    return (seq % 1000) * 10 + CODE_TO_JDG[code]
 
 
 # ---------- 게이트웨이 시리얼 (protocol.md 2절) ----------
-def gateway_tx(radio_msg: str) -> str:
-    return f"TX:{_check(radio_msg)}\n"
+def encode_judgment(code: str) -> str:
+    """노트북 → 게이트웨이 판정 한 줄 (줄바꿈은 보내는 쪽이 붙임). 예: NG → 'J3'."""
+    if code not in CODE_TO_JDG:
+        raise ValueError(f"판정 코드는 {CODES} 중 하나: {code!r}")
+    return f"J{CODE_TO_JDG[code]}"
 
 
-def parse_gateway_line(line: str) -> tuple[str, str] | None:
-    """('RX', 라디오메시지) / ('PIN', 'STOP'|'RUN') / ('GW', 'BOOT')."""
-    line = line.strip()
-    if ":" not in line:
+@dataclass(frozen=True)
+class GatewayMsg:
+    kind: str             # ACK, MODE, HELP, DANGER, LINK, ERR
+    a: int | None = None  # ACK 순번, 모드 번호, 0/1, 위험 단계, LINK 1(OK)/0(LOST)
+    b: int | None = None  # ACK 판정 번호
+
+
+def parse_gateway_line(line: str) -> GatewayMsg | None:
+    """게이트웨이 → 노트북 한 줄. 모르는 줄·범위 밖 값은 None (규격: 무시)."""
+    parts = line.strip().split(",")
+    head = parts[0]
+    try:
+        if head == "ACK" and len(parts) == 3:
+            seq, jdg = int(parts[1]), int(parts[2])
+            return GatewayMsg("ACK", seq, jdg) if 0 <= jdg <= 4 else None
+        if head == "MODE" and len(parts) == 2:
+            return GatewayMsg("MODE", int(Mode(int(parts[1]))))
+        if head == "HELP" and len(parts) == 2 and parts[1] in ("0", "1"):
+            return GatewayMsg("HELP", int(parts[1]))
+        if head == "DNG" and len(parts) == 2:
+            return GatewayMsg("DANGER", int(Danger(int(parts[1]))))
+        if head == "LINK" and len(parts) == 2 and parts[1] in ("OK", "LOST"):
+            return GatewayMsg("LINK", 1 if parts[1] == "OK" else 0)
+        if head == "ERR":
+            return GatewayMsg("ERR")
+    except ValueError:
         return None
-    head, body = line.split(":", 1)
-    if head in ("RX", "PIN", "GW"):
-        return head, body
     return None
 
 

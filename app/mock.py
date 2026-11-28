@@ -2,7 +2,7 @@
 
 - MockVision: 회색 벨트 위로 병 그림이 흘러가는 화면. 가상 벨트(SimBelt)가 돌 때만 움직인다.
   판정은 그림의 실제 클래스를 쓰고, 약 7%는 신뢰도가 낮아 재검사가 된다.
-- MockHands: 판정을 게이트웨이로 보내면(sorting 켰을 때) 손이 ACK → DONE으로 응답
+- MockGateway: 판정(J0~J4)을 보내면(sorting 켰을 때) 게이트웨이처럼 ACK,순번,판정으로 응답
 - MockOperator: 처음에 리셋 버튼을 눌러 주고, 드물게 하트비트 끊김 정지 → 4초 뒤 다시 리셋
 
 모의 이벤트도 실제와 같은 규격(common/protocol.py)으로 만든다. 모의에서만 쓰는 메시지를 만들지 않는다.
@@ -14,7 +14,6 @@ import random
 
 from PIL import Image, ImageDraw
 
-from common import protocol as p
 from communication.serial_bridge.links import FakeLink
 from vision.bottle.classifier import combine
 from vision.bottle.detect import Detection, StreakCounter, box_inside
@@ -134,19 +133,21 @@ class MockVision:
         pass
 
 
-class MockHands:
-    """게이트웨이 흉내. TX:J… 를 받으면 손이 ACK → DONE 응답 (sorting 켰을 때만 쓰임)."""
+class MockGateway:
+    """게이트웨이 흉내 (code/microbit/gateway_bridge.ts). J0~J4를 받으면 라디오로 보낸 셈 치고 ACK,순번,판정."""
 
     def __init__(self):
         self.link = FakeLink()
         self.pending: list[tuple[int, str]] = []
+        self.seq = 0
 
     def step(self, now: int) -> None:
         for line in self.link.sent:
-            if line.startswith("TX:J"):
-                msg = p.parse_radio(line[3:])
-                hand = p.CODE_TO_HAND[msg.b]
-                self.pending += [(now + 200, f"RX:ACK{hand},{msg.a}"), (now + 1400, f"RX:H{hand},DONE")]
+            if len(line) == 2 and line[0] == "J" and line[1] in "01234":
+                self.seq = self.seq % 999 + 1
+                self.pending.append((now + 60, f"ACK,{self.seq},{line[1]}"))   # 3번 반복 전송 시간
+            else:
+                self.pending.append((now, f"ERR,{line}"))
         self.link.sent.clear()
         for _t, line in [x for x in self.pending if x[0] <= now]:
             self.link.inject(line)

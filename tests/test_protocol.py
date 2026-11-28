@@ -4,41 +4,49 @@ import pytest
 from common import protocol as p
 
 
-def test_radio_messages_fit_19_chars():
-    for msg in [p.encode_mode(1), p.encode_danger(2), p.encode_judgment(999, "RE"), p.encode_heartbeat(99)]:
-        assert len(msg) <= p.RADIO_MAX_LEN
-
-
-def test_encode_examples_match_spec():
-    assert p.encode_mode(2) == "M2"
-    assert p.encode_danger(2) == "D2"
-    assert p.encode_judgment(12, "CO") == "J12,CO"
-    assert p.encode_judgment(1000, "OK") == "J0,OK"   # 999 다음은 0
-    assert p.encode_heartbeat(100) == "HB3,0"
-
-
-def test_mode_3_is_not_used():
+def test_judgment_numbers_match_microbit_code():
+    # code/microbit: 0 재검사, 1 투명 적합, 2 내용물 남음(안 씀), 3 라벨 있음, 4 유색·불투명
+    assert p.CODE_TO_JDG == {"RE": 0, "OK": 1, "NG": 3, "CO": 4}
+    assert p.encode_judgment("NG") == "J3"
+    assert p.encode_judgment("OK") == "J1"          # OK도 보낸다 (날개판을 나란히)
     with pytest.raises(ValueError):
-        p.encode_mode(3)
+        p.encode_judgment("XX")
+    assert p.jdg_value(57, "CO") == 574             # 순번 × 10 + 판정 번호
 
 
-@pytest.mark.parametrize("msg,kind,a,b", [
-    ("M4", "MODE", 4, None), ("D1", "DANGER", 1, None), ("HB3,7", "HEARTBEAT", 7, None),
-    ("J12,NG", "JUDGMENT", 12, "NG"), ("H2,DONE", "HAND", 2, "DONE"), ("ACK1,12", "ACK", 1, "12"),
+def test_hands_divert_rule_matches_codes():
+    # hand12_sorter.ts shouldDivert: 손 1은 4, 손 2는 0·2·3
+    for code, jdg in p.CODE_TO_JDG.items():
+        hand = 1 if jdg == 4 else (2 if jdg in (0, 2, 3) else None)
+        assert p.CODE_TO_HAND[code] == hand
+
+
+def test_mode_3_is_pause():
+    assert p.Mode(3) == p.Mode.PAUSE
+    assert p.UNO_PIN_MODES[int(p.Mode.PAUSE)] == 0b00
+    with pytest.raises(ValueError):
+        p.Mode(5)                                   # 도움 요청은 모드가 아니라 help
+
+
+@pytest.mark.parametrize("line,kind,a,b", [
+    ("ACK,57,4", "ACK", 57, 4), ("MODE,3", "MODE", 3, None), ("HELP,1", "HELP", 1, None),
+    ("DNG,2", "DANGER", 2, None), ("LINK,OK", "LINK", 1, None), ("LINK,LOST", "LINK", 0, None),
+    ("ERR,J9", "ERR", None, None), ("DNG,1\r", "DANGER", 1, None),
 ])
-def test_parse_radio(msg, kind, a, b):
-    r = p.parse_radio(msg)
-    assert r == p.RadioMsg(kind, a, b)
+def test_parse_gateway_line(line, kind, a, b):
+    assert p.parse_gateway_line(line) == p.GatewayMsg(kind, a, b)
 
 
-@pytest.mark.parametrize("msg", ["", "X1", "M3", "J12,XX", "H1,FLY", "hello"])
-def test_unknown_messages_are_ignored(msg):
-    assert p.parse_radio(msg) is None
+@pytest.mark.parametrize("line", ["", "garbage", "MODE,5", "MODE,x", "DNG,3", "HELP,2", "LINK,MAYBE",
+                                  "ACK,1,9", "ACK,1", "RX:M1", "PIN:STOP"])
+def test_unknown_gateway_lines_are_ignored(line):
+    assert p.parse_gateway_line(line) is None
 
 
 def test_priority_order():
     assert p.effective_state(p.Mode.LOCKOUT, p.Danger.STOP) == "STOP"
     assert p.effective_state(p.Mode.LOCKOUT, p.Danger.WARN) == "LOCKOUT"
+    assert p.effective_state(p.Mode.PAUSE, p.Danger.WARN) == "PAUSE"
     assert p.effective_state(p.Mode.SLOW, p.Danger.WARN) == "WARN"
     assert p.effective_state(p.Mode.SLOW, p.Danger.NONE) == "SLOW"
     assert p.effective_state(p.Mode.AUTO, p.Danger.NONE) == "AUTO"
@@ -55,11 +63,7 @@ def test_class_codes_and_hands():
     assert p.CODE_TO_HAND == {"OK": None, "CO": 1, "NG": 2, "RE": 2}
 
 
-def test_gateway_and_arduino_lines():
-    assert p.gateway_tx("J1,CO") == "TX:J1,CO\n"
-    assert p.parse_gateway_line("RX:D2") == ("RX", "D2")
-    assert p.parse_gateway_line("PIN:STOP") == ("PIN", "STOP")
-    assert p.parse_gateway_line("garbage") is None
+def test_arduino_lines():
     assert p.arduino_cmd("GO") == "GO\n"
     assert p.arduino_cmd("PAUSE") == "PAUSE\n"
     for cmd in ("RESET", "RUN", "ARM", "SPD,N"):

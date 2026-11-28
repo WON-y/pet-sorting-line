@@ -84,7 +84,7 @@ class LineRunner:
                 self.belt.send(p.arduino_cmd(act[1]))
             elif kind == "gateway":
                 if self.gateway is not None:
-                    self.gateway.send(p.gateway_tx(act[1]))
+                    self.gateway.send(act[1] + "\n")
             elif kind == "publish":
                 retain = act[1] == "state"
                 self.publisher.publish(p.topic(act[1], self.prefix), act[2], retain=retain)
@@ -144,11 +144,11 @@ class LineRunner:
             h.step(t)
         if self.gateway is not None:
             for line in self.gateway.read_lines():
-                parsed = p.parse_gateway_line(line)
-                if parsed and parsed[0] == "RX":
-                    msg = p.parse_radio(parsed[1])
-                    if msg:
-                        self.execute(self.ctl.on_radio(msg, t))
+                msg = p.parse_gateway_line(line)
+                if msg is None or msg.kind == "ERR":
+                    log.warning("게이트웨이: %s", line)
+                    continue
+                self.execute(self.ctl.on_gateway(msg, t))
         for line in self.belt.read_lines():
             parts = p.parse_arduino_line(line)
             if parts:

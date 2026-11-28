@@ -11,7 +11,7 @@
 
 | 키 | 기본값 | 쓰는 곳 | 설명 |
 | --- | --- | --- | --- |
-| `radio.group` | 37 | 모든 micro:bit | 라디오 그룹 |
+| `radio.group` | 73 | 모든 micro:bit | 라디오 그룹. micro:bit 코드의 `RADIO_GROUP`과 같게 |
 | `serial.gateway_port` | "" | app | 게이트웨이 시리얼 포트 (`GATEWAY_PORT`) |
 | `serial.arduino_port` | "" | app | 우노 시리얼 포트 (`ARDUINO_PORT`) |
 | `serial.baud` | 115200 | app, 펌웨어 | |

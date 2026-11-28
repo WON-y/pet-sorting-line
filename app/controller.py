@@ -4,14 +4,14 @@
 line.py가 그 일을 실제로 실행한다. 그래서 pytest로 하드웨어 없이 시험할 수 있다.
 
 Action 형식:
-  ("gateway", 라디오메시지)       게이트웨이로 TX
+  ("gateway", 판정 줄)             게이트웨이로 보냄 (J0~J4, protocol.encode_judgment)
   ("arduino", 명령)               우노로 보냄 (PAUSE, GO, HOLD)
   ("publish", 토픽이름, payload)   기록 (토픽이름은 protocol.TOPICS 중 하나)
   ("capture", 병id)               사진 촬영 + 판정 시작
 
 병 한 개의 흐름:
   IDLE ─(웹캠 도착 감지 → PAUSE / IR 도착 EVT,ARRIVE / 수동 촬영)→ SETTLE ─(settle_ms)→ CAPTURE
-  CAPTURE ─(판정)→ [sorting이면 WAIT_ACK → WAIT_SORT] → RESUME_WAIT ─(resume_delay_ms, GO)→ LEAVE
+  CAPTURE ─(판정)→ [sorting이면 J0~J4 → WAIT_ACK ─(게이트웨이 ACK)] → RESUME_WAIT ─(resume_delay_ms, GO)→ LEAVE
   LEAVE ─(판정 구역이 빔)→ IDLE
 이 프로그램은 재가동 명령을 보내지 않는다. 잠긴 벨트는 리셋 버튼으로만 다시 돈다.
 """
@@ -22,7 +22,7 @@ from common import protocol as p
 Action = tuple
 
 # 이 상태에서 정지·잠금이 걸리면 그 병은 끝까지 처리되지 못한 것 (ABORTED 기록)
-_IN_PROGRESS = ("SETTLE", "CAPTURE", "WAIT_ACK", "WAIT_SORT")
+_IN_PROGRESS = ("SETTLE", "CAPTURE", "WAIT_ACK")
 
 
 class LineController:
@@ -33,7 +33,9 @@ class LineController:
         self.belt = "STOP"            # 우노 상태: RUN, PAUSE, STOP (켜면 잠김)
         self.speed = "N"
         self.stop_cause: str | None = None
-        self.state = "IDLE"           # IDLE, SETTLE, CAPTURE, WAIT_ACK, WAIT_SORT, RESUME_WAIT, LEAVE
+        self.help = 0                 # 도움 요청 (손 3 help)
+        self.link: bool | None = None  # 손 3 신호를 게이트웨이가 받는 중인지 (게이트웨이 소식이 없으면 None)
+        self.state = "IDLE"           # IDLE, SETTLE, CAPTURE, WAIT_ACK, RESUME_WAIT, LEAVE
         self.bottle_id = -1
         self.trigger: str | None = None   # CAM(웹캠), IR(도착 센서), MANUAL(대시보드)
         self.code: str | None = None
@@ -52,7 +54,7 @@ class LineController:
         return {"ts": p.now_iso(), "src": "app", "run": self.belt, "speed": self.speed,
                 "mode": int(self.mode), "danger": int(self.danger),
                 "state": p.effective_state(self.mode, self.danger), "line": self.state,
-                "bottle": self.bottle_id, "cause": self.stop_cause}
+                "bottle": self.bottle_id, "cause": self.stop_cause, "help": self.help, "link": self.link}
 
     def _new_bottle(self, trigger: str, now_ms: int) -> None:
         self.bottle_id = (self.bottle_id + 1) % 1000
@@ -104,45 +106,50 @@ class LineController:
         acts: list[Action] = [("publish", "judgment", payload | (extra or {}))]
         if not self.sorting:
             return acts + self._resume(now_ms)
-        if p.CODE_TO_HAND[code] is None:   # 적합: 손이 움직이지 않음
-            return acts + self._sorted(None, now_ms)
+        # OK도 보낸다: 손 1·2가 날개판을 나란히 돌려 놓아야 한다 (손은 다음 판정까지 각도 유지)
         self.state, self._sent_at_ms, self._retried = "WAIT_ACK", now_ms, False
-        return acts + [("gateway", p.encode_judgment(self.bottle_id, code))]
+        return acts + [("gateway", p.encode_judgment(code))]
 
-    def _sorted(self, hand: int | None, now_ms: int) -> list[Action]:
-        acts: list[Action] = [("publish", "sort", {"ts": p.now_iso(), "src": "app", "id": self.bottle_id,
-                                                   "hand": hand, "result": "DONE"})]
-        return acts + self._resume(now_ms)
+    # ---------- 게이트웨이 (protocol.md 2절) ----------
+    def _safety(self, level: int, event: str, cause: str) -> Action:
+        return ("publish", "safety", {"ts": p.now_iso(), "src": "app", "level": level, "event": event,
+                                      "cause": cause})
 
-    # ---------- 라디오 (게이트웨이 RX) ----------
-    def on_radio(self, msg: p.RadioMsg, now_ms: int, by: str = "card") -> list[Action]:
+    def on_gateway(self, msg: p.GatewayMsg, now_ms: int) -> list[Action]:
+        """게이트웨이가 알려 준 손 3 상태와 판정 전송 확인. 기록만 한다 (벨트는 모드 핀으로 우노가 이미 처리)."""
         acts: list[Action] = []
         if msg.kind == "MODE":
             new = p.Mode(msg.a)
-            if self.mode == p.Mode.LOCKOUT and new == p.Mode.AUTO:
-                return []  # 점검 잠금 중에는 1 무시 (4를 치운 뒤 처리는 손 3이 담당)
             if new == self.mode:
                 return []
             self.mode = new
-            acts.append(("publish", "mode", {"ts": p.now_iso(), "src": "app", "mode": int(new), "by": by}))
+            acts.append(("publish", "mode", {"ts": p.now_iso(), "src": "app", "mode": int(new), "by": "hand3"}))
             if new == p.Mode.LOCKOUT:
                 acts += [("arduino", "HOLD")] + self._abort("lockout")
+            elif new == p.Mode.PAUSE:
+                acts += self._abort("pause")
         elif msg.kind == "DANGER":
             level = p.Danger(msg.a)
             if level == self.danger:
                 return []
             self.danger = level
-            event = {0: "CLEAR", 1: "WARN", 2: "STOP"}[int(level)]
-            acts.append(("publish", "safety", {"ts": p.now_iso(), "src": "app", "level": int(level),
-                                               "event": event, "cause": "RADIO"}))
+            acts.append(self._safety(int(level), {0: "CLEAR", 1: "WARN", 2: "STOP"}[int(level)], "ULTRASONIC"))
             if level == p.Danger.STOP:
-                acts += self._abort("danger")  # 실제 정지는 우노가 이미 했음 (모드 핀)
-        elif msg.kind == "ACK" and self.state == "WAIT_ACK" and int(msg.b or -1) == self.bottle_id:
-            self.state = "WAIT_SORT"
-        elif msg.kind == "HAND":
-            acts.append(("publish", "hand", {"ts": p.now_iso(), "src": "app", "hand": msg.a, "state": msg.b}))
-            if msg.b == "DONE" and self.state == "WAIT_SORT":
-                acts += self._sorted(msg.a, now_ms)
+                acts += self._abort("danger")  # 실제 정지는 손 3 → 모드 3 → 모드 핀 00으로 우노가 이미 했음
+        elif msg.kind == "HELP":
+            if msg.a != self.help:
+                self.help = msg.a
+                acts.append(self._safety(0, "HELP" if msg.a else "HELP_END", "HAND3"))
+        elif msg.kind == "LINK":
+            ok = bool(msg.a)
+            if ok != self.link:
+                self.link = ok
+                if not ok:
+                    acts.append(self._safety(0, "ERROR", "LINK_LOST"))
+        elif msg.kind == "ACK" and self.state == "WAIT_ACK" and msg.b == p.CODE_TO_JDG.get(self.code or ""):
+            acts.append(("publish", "sort", {"ts": p.now_iso(), "src": "app", "id": self.bottle_id,
+                                             "hand": p.CODE_TO_HAND[self.code], "result": "SENT", "seq": msg.a}))
+            acts += self._resume(now_ms)
         return acts
 
     # ---------- 우노 ----------
@@ -185,8 +192,6 @@ class LineController:
         if self.state == "WAIT_ACK" and now_ms - self._sent_at_ms > self.ack_timeout_ms:
             if not self._retried:
                 self._retried, self._sent_at_ms = True, now_ms
-                return [("gateway", p.encode_judgment(self.bottle_id, self.code or p.RECHECK))]
-            return [("arduino", "HOLD"), ("publish", "safety", {"ts": p.now_iso(), "src": "app", "level": 0,
-                                                                 "event": "ERROR", "cause": "NO_ACK"})] + \
-                self._abort("no_ack")
+                return [("gateway", p.encode_judgment(self.code or p.RECHECK))]
+            return [("arduino", "HOLD"), self._safety(0, "ERROR", "NO_ACK")] + self._abort("no_ack")
         return []
