@@ -33,7 +33,10 @@ def build(cfg: dict, mock: bool, video: str | None = None, web: bool = True,
           phone: bool = False) -> tuple[LineRunner, object]:
     vcfg, acfg, scfg = cfg["vision"], cfg["app"], cfg["serial"]
     ctl = LineController(ack_timeout_ms=acfg["ack_timeout_ms"], settle_ms=acfg.get("settle_ms", 400),
-                         resume_delay_ms=acfg.get("resume_delay_ms", 2000), sorting=bool(acfg.get("sorting")))
+                         resume_delay_ms=acfg.get("resume_delay_ms", 2000), sorting=bool(acfg.get("sorting")),
+                         stop_to_judge=bool(acfg.get("stop_to_judge", False)), flow=acfg.get("flow"))
+    if ctl.sorting and not ctl.stop_to_judge and not ctl.flow_ready():
+        log.warning("app.flow 실측값이 비어 있어 판정을 바로 보냅니다. 병 간격을 넓게 두세요 (app/README.md)")
     capture_dir = _path(vcfg.get("capture_dir", "data/captures"))
     db_path = _path(cfg["dashboard"]["db_path"])
     if mock:   # 가짜 사진·기록이 실제 벨트 사진(재학습용)과 섞이지 않게 따로 둔다

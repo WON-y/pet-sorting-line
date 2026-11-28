@@ -36,6 +36,7 @@ class MockVision:
         self.edge_margin = d.get("edge_margin", 10)
         self.counter = StreakCounter(d.get("stable_frames", 5), d.get("clear_frames", 10))
         self.baseline = True           # 모의 화면은 처음부터 빈 벨트 기준이 있다고 본다
+        self.check: dict | None = None
         self._pos = belt.position
         self.serial = 0
         self._spawn()
@@ -85,8 +86,10 @@ class MockVision:
         return self.det
 
     # ---- 설정 ----
-    def set_baseline(self) -> None:
+    def set_baseline(self, moving: bool = False) -> None:
+        """모의 화면은 벨트 무늬가 일정해 바로 만들어진 것으로 본다."""
         self.baseline = True
+        self.check = {"kind": "multi", "frames": 0, "false": 0, "ok": True} if moving else {"kind": "single"}
         self.counter.reset()
 
     def set_roi(self, roi) -> None:
@@ -95,7 +98,8 @@ class MockVision:
 
     def info(self) -> dict:
         return {"source": "mock", "mock": True, "width": W, "height": H, "roi": self.roi,
-                "baseline": self.baseline, "detect": self.det.status, "box": self.det.box,
+                "baseline": self.baseline, "learning": None, "baseline_check": self.check,
+                "detect": self.det.status, "box": self.det.box,
                 "model": "모의 (색 + 라벨)"}
 
     # ---- 촬영·판정 ----

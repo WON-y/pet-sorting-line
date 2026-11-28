@@ -17,6 +17,8 @@ training/raw/
 # 벨트 촬영 사진 (재학습용, 손이 찍힐 수 있음)
 data/captures/
 data/mock/
+# 빈 벨트 사진 (감지 기준용, 용량이 커서 팀 공유 드라이브로 나눔)
+data/belt_empty/
 /captures/
 *.mp4
 *.mov

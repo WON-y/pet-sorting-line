@@ -7,7 +7,7 @@
 
 ```
 손 1~4 (micro:bit) ──라디오── 게이트웨이 micro:bit ──USB 시리얼── 노트북 app (python -m app)
-                                   │ 핀 P0·P1 모드 2비트, P2 하트비트      │ USB 시리얼 (PAUSE·GO)
+                                   │ 핀 P0·P1 모드 2비트, P2 하트비트      │ USB 시리얼 (HOLD, 선택 PAUSE·GO)
                                    └──────────── 아두이노 우노 ───────────┘
 노트북 app = 웹캠 판정 + 대시보드(FastAPI) + SQLite, 한 프로그램 (기본, 도커 없음)
 (선택) 노트북 app ──MQTT── mosquitto(도커) ──MQTT── dashboard(도커)
@@ -93,8 +93,8 @@
 
 | 명령 | 뜻 |
 | --- | --- |
-| `PAUSE` | 웹캠이 병 도착을 감지함 → 검사 자리에서 멈춤 (검사 멈춤, 잠기지 않음) |
-| `GO` | 판정 끝 → 검사 멈춤을 풀고 다시 돌림. 잠김 상태에서는 무시 |
+| `PAUSE` | (`app.stop_to_judge: true`일 때만) 웹캠이 병 도착을 감지함 → 검사 자리에서 멈춤 (검사 멈춤, 잠기지 않음). 기본 방식에서는 보내지 않는다 |
+| `GO` | 판정 끝 → 검사 멈춤(`PAUSE`, IR 도착 센서)을 풀고 다시 돌림. 잠김 상태에서는 무시 |
 | `HOLD` | 정지 + 잠김. 다시 돌리려면 리셋 버튼 |
 | `PING` | 연결 확인 |
 
@@ -124,9 +124,9 @@
 | 토픽 | 언제 | payload 예 |
 | --- | --- | --- |
 | `pet/judgment` | 병 판정 확정 | `{"ts":"2026-11-20T14:03:05+09:00","src":"app","id":12,"cls":"clear_label","code":"NG","conf":0.93,"frames":1,"trigger":"CAM","img":"20261120/W_20261120-140305_012_crop.jpg","full":"20261120/W_20261120-140305_012_full.jpg"}` (trigger: `CAM` 웹캠 / `IR` 도착 센서 / `MANUAL` 대시보드, img·full: 사진 폴더 기준 경로, detail: 두 모델 각각의 결과 `{"color":"clear","color_conf":0.98,"label":"label","label_conf":0.93}`, 4클래스 모델 하나일 때는 없음) |
-| `pet/sort` | 판정을 손에 보냄 (`app.sorting: true`) 또는 병 처리 중단 | `{"ts":...,"id":12,"hand":2,"result":"SENT","seq":57}` (result: `SENT` 게이트웨이가 라디오로 보냄, `ABORTED` 정지·잠금으로 중단. hand: 분기하는 손, `OK`면 null) |
+| `pet/sort` | 판정을 손에 보냄 (`app.sorting: true`) 또는 병 처리 중단 | `{"ts":...,"id":12,"hand":2,"result":"SENT","seq":57,"late":false}` (result: `SENT` 게이트웨이가 라디오로 보냄, `ABORTED` 정지·잠금으로 중단. hand: 분기하는 손, `OK`면 null. late: 벨트를 멈추지 않을 때 보낼 시각을 넘김 → 이 병은 잘못 갔을 수 있음) |
 | `pet/mode` | 운전 모드 변경 | `{"ts":...,"mode":2,"by":"hand3"}` (mode 1~4, by: `hand3` 손 3 수신호·카드 (게이트웨이 `MODE,n`) / `gesture` 노트북 손짓, 예정) |
-| `pet/safety` | 경고·정지·재가동 | `{"ts":...,"level":2,"event":"STOP","cause":"IR"}` (event: `WARN` 접근 경고, `STOP` 정지, `RUN` 재가동, `CLEAR` 경고 해제, `HELP`·`HELP_END` 도움 요청 켜짐·꺼짐, `ERROR` 오류. ERROR cause: `NO_ACK` 게이트웨이 응답 없음, `LINK_LOST` 손 3 신호 끊김) |
+| `pet/safety` | 경고·정지·재가동 | `{"ts":...,"level":2,"event":"STOP","cause":"IR"}` (event: `WARN` 접근 경고, `STOP` 정지, `RUN` 재가동, `CLEAR` 경고 해제, `HELP`·`HELP_END` 도움 요청 켜짐·꺼짐, `ERROR` 오류. ERROR cause: `NO_ACK` 게이트웨이 응답 없음, `LINK_LOST` 손 3 신호 끊김, `TOO_CLOSE` 병 간격이 좁아 뒷 병 판정을 제때 보낼 수 없음) |
 | `pet/hand/<n>` | (예비) 손 상태 | 지금 손은 상태를 보내지 않아 쓰지 않는다 |
 | `pet/state` | 1초마다 | `{"ts":...,"run":"RUN","speed":"N","mode":1,"danger":0,"state":"AUTO","line":"IDLE","bottle":12,"cause":null,"help":0,"link":true}` (state 우선순위: `modes_and_states.md` 3절, link: 손 3 신호를 받는 중인지, 게이트웨이가 없으면 null) |
 

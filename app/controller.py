@@ -9,10 +9,13 @@ Action 형식:
   ("publish", 토픽이름, payload)   기록 (토픽이름은 protocol.TOPICS 중 하나)
   ("capture", 병id)               사진 촬영 + 판정 시작
 
-병 한 개의 흐름:
-  IDLE ─(웹캠 도착 감지 → PAUSE / IR 도착 EVT,ARRIVE / 수동 촬영)→ SETTLE ─(settle_ms)→ CAPTURE
+병 한 개의 흐름 — 기본 (app.stop_to_judge: false, 벨트를 멈추지 않음):
+  IDLE ─(웹캠 도착 감지 / 수동 촬영)→ CAPTURE ─(판정)→ LEAVE ─(판정 구역이 빔)→ IDLE
+  sorting이면 판정을 '보낼 차례 목록'에 넣고, 벨트가 움직인 거리로 보낼 시각을 계산한다 (_pump).
+  IR 도착 센서(EVT,ARRIVE)는 우노가 스스로 멈추므로 판정 뒤 GO를 보낸다.
+예전 방식 (app.stop_to_judge: true, 판정할 때 벨트를 멈춤):
+  IDLE ─(웹캠 도착 감지 → PAUSE / IR 도착 / 수동 촬영)→ SETTLE ─(settle_ms)→ CAPTURE
   CAPTURE ─(판정)→ [sorting이면 J0~J4 → WAIT_ACK ─(게이트웨이 ACK)] → RESUME_WAIT ─(resume_delay_ms, GO)→ LEAVE
-  LEAVE ─(판정 구역이 빔)→ IDLE
 이 프로그램은 재가동 명령을 보내지 않는다. 잠긴 벨트는 리셋 버튼으로만 다시 돈다.
 """
 from __future__ import annotations
@@ -23,11 +26,23 @@ Action = tuple
 
 # 이 상태에서 정지·잠금이 걸리면 그 병은 끝까지 처리되지 못한 것 (ABORTED 기록)
 _IN_PROGRESS = ("SETTLE", "CAPTURE", "WAIT_ACK")
+FLOW_KEYS = ("hand1_mm", "hand2_mm", "flap_mm", "bottle_mm")
+
+
+def flaps_for(code: str) -> tuple[bool, bool]:
+    """판정 → (손 1 날개판 비스듬히?, 손 2 날개판 비스듬히?). hand12_sorter.ts shouldDivert와 같다."""
+    hand = p.CODE_TO_HAND[code]
+    return hand == 1, hand == 2
+
+
+def hands_reached(code: str) -> tuple[int, ...]:
+    """병이 지나가는 손. 손 1에서 빠지는 병(CO)은 손 2까지 가지 않는다."""
+    return (1,) if p.CODE_TO_HAND[code] == 1 else (1, 2)
 
 
 class LineController:
     def __init__(self, ack_timeout_ms: int = 1500, settle_ms: int = 400, resume_delay_ms: int = 2000,
-                 sorting: bool = False):
+                 sorting: bool = False, stop_to_judge: bool = False, flow: dict | None = None):
         self.mode = p.Mode.AUTO
         self.danger = p.Danger.NONE
         self.belt = "STOP"            # 우노 상태: RUN, PAUSE, STOP (켜면 잠김)
@@ -41,9 +56,20 @@ class LineController:
         self.code: str | None = None
         self.ack_timeout_ms, self.settle_ms = ack_timeout_ms, settle_ms
         self.resume_delay_ms, self.sorting = resume_delay_ms, sorting
+        self.stop_to_judge = stop_to_judge
         self._due_ms = 0
         self._sent_at_ms = 0
         self._retried = False
+        # ---- 벨트를 멈추지 않을 때 (stop_to_judge: false) ----
+        self.flow = dict(flow or {})
+        self.pos_mm = 0.0                       # 벨트가 움직인 거리 (RUN일 때만 늘어남)
+        self._last_tick: int | None = None
+        self._bottle_pos = 0.0                  # 지금 판정 중인 병을 감지했을 때의 pos_mm
+        self._resume_after = False              # IR 도착으로 우노가 멈췄으면 판정 뒤 GO
+        self.queue: list[dict] = []             # 판정은 끝났고 손에 보낼 차례를 기다리는 병
+        self.sending: dict | None = None        # 보냈고 게이트웨이 ACK를 기다리는 병
+        self.flight: list[dict] = []            # 손에 보냈고 아직 손을 다 지나지 않은 병
+        self.flaps = (False, False)             # 지금 날개판 (손 1, 손 2) 비스듬히? 켜면 둘 다 나란히
 
     @property
     def running(self) -> bool:
@@ -61,24 +87,38 @@ class LineController:
         self.trigger, self.code = trigger, None
         self.state, self._due_ms = "SETTLE", now_ms + self.settle_ms
 
+    def _capture_now(self, trigger: str, now_ms: int) -> list[Action]:
+        """벨트를 멈추지 않는 방식: 감지한 그 프레임으로 바로 찍는다."""
+        self._new_bottle(trigger, now_ms)
+        self.state, self._bottle_pos = "CAPTURE", self.pos_mm
+        return [("capture", self.bottle_id)]
+
+    def _sort_msg(self, bottle_id: int, result: str, **extra) -> Action:
+        return ("publish", "sort", {"ts": p.now_iso(), "src": "app", "id": bottle_id, "result": result} | extra)
+
     def _abort(self, reason: str) -> list[Action]:
         acts: list[Action] = []
         if self.state in _IN_PROGRESS and self.bottle_id >= 0:
-            acts.append(("publish", "sort", {"ts": p.now_iso(), "src": "app", "id": self.bottle_id,
-                                             "result": "ABORTED", "reason": reason}))
-        self.state, self.code = "IDLE", None
+            acts.append(self._sort_msg(self.bottle_id, "ABORTED", reason=reason))
+        # 아직 손에 보내지 못한 병도 중단. 벨트 위 병은 사람이 꺼내 다시 넣는다 (5절)
+        for b in ([self.sending] if self.sending else []) + self.queue:
+            acts.append(self._sort_msg(b["id"], "ABORTED", reason=reason))
+        self.queue, self.sending, self.flight = [], None, []
+        self.state, self.code, self._resume_after = "IDLE", None, False
         return acts
 
     def _resume(self, now_ms: int) -> list[Action]:
-        """판정(·분기)이 끝났다 → 잠시 뒤 벨트 자동 출발."""
+        """판정(·분기)이 끝났다 → 잠시 뒤 벨트 자동 출발 (예전 방식)."""
         self.state, self._due_ms = "RESUME_WAIT", now_ms + self.resume_delay_ms
         return []
 
     # ---------- 비전 (웹캠 도착 감지) ----------
     def on_detect(self, now_ms: int) -> list[Action]:
-        """병이 판정 구역에 완전히 들어온 상태. 벨트가 돌고 있을 때만 멈추고 판정한다."""
+        """병이 판정 구역에 완전히 들어온 상태. 벨트가 돌고 있을 때만 판정한다."""
         if self.state != "IDLE" or self.belt != "RUN":
             return []
+        if not self.stop_to_judge:
+            return self._capture_now("CAM", now_ms)
         self._new_bottle("CAM", now_ms)
         return [("arduino", "PAUSE")]
 
@@ -89,9 +129,11 @@ class LineController:
         return []
 
     def on_manual(self, now_ms: int) -> list[Action]:
-        """대시보드 '지금 촬영'. 벨트가 돌고 있으면 멈추고 찍는다."""
+        """대시보드 '지금 촬영'. 예전 방식에서는 벨트가 돌고 있으면 멈추고 찍는다."""
         if self.state != "IDLE":
             return []
+        if not self.stop_to_judge:
+            return self._capture_now("MANUAL", now_ms)
         self._new_bottle("MANUAL", now_ms)
         return [("arduino", "PAUSE")] if self.belt == "RUN" else []
 
@@ -104,11 +146,69 @@ class LineController:
         payload = {"ts": p.now_iso(), "src": "app", "id": self.bottle_id, "cls": cls, "code": code,
                    "conf": round(conf, 3), "frames": frames, "trigger": self.trigger}
         acts: list[Action] = [("publish", "judgment", payload | (extra or {}))]
+        if not self.stop_to_judge:
+            self.state = "LEAVE"
+            if self._resume_after:                  # IR 도착 센서로 우노가 멈춰 있음
+                self._resume_after = False
+                acts.append(("arduino", "GO"))
+            if self.sorting:
+                self.queue.append({"id": self.bottle_id, "code": code, "pos": self._bottle_pos})
+                acts += self._pump(now_ms)
+            return acts
         if not self.sorting:
             return acts + self._resume(now_ms)
         # OK도 보낸다: 손 1·2가 날개판을 나란히 돌려 놓아야 한다 (손은 다음 판정까지 각도 유지)
         self.state, self._sent_at_ms, self._retried = "WAIT_ACK", now_ms, False
         return acts + [("gateway", p.encode_judgment(code))]
+
+    # ---------- 벨트를 멈추지 않을 때: 판정을 손에 보낼 시각 (modes_and_states.md 5절) ----------
+    def flow_ready(self) -> bool:
+        speed = self.flow.get("speed_mm_s") or {}
+        return all(self.flow.get(k) is not None for k in FLOW_KEYS) and \
+            speed.get("N") is not None and speed.get("S") is not None
+
+    def _speed_mm_s(self) -> float:
+        return float((self.flow.get("speed_mm_s") or {}).get(self.speed) or 0.0)
+
+    def _passed(self, b: dict, hand: int) -> float:
+        """병 b의 꼬리가 손 hand 날개판을 다 지나는 pos_mm. 감지할 때 꼬리는 판정 구역 들어오는 쪽 가장자리."""
+        return b["pos"] + self.flow[f"hand{hand}_mm"] + self.flow["flap_mm"]
+
+    def _window(self, b: dict) -> tuple[float, float]:
+        """병 b의 판정을 보내도 되는 pos_mm 범위 (가장 이르게, 가장 늦게).
+
+        - 가장 이르게: 바뀌는 날개판을 아직 지나야 하는 앞 병들이 그 날개판을 다 지난 뒤
+        - 가장 늦게: b의 머리가 바뀌는 날개판에 닿기 전에 날개판이 다 돌아가 있도록 (flap_ms + margin_ms)
+        """
+        want = flaps_for(b["code"])
+        changed = [h for h in (1, 2) if want[h - 1] != self.flaps[h - 1]]
+        earliest = max((self._passed(f, h) for f in self.flight for h in changed
+                        if h in hands_reached(f["code"])), default=float("-inf"))
+        lead = self._speed_mm_s() * (self.flow.get("flap_ms", 400) + self.flow.get("margin_ms", 300)) / 1000
+        latest = min((b["pos"] + self.flow[f"hand{h}_mm"] - self.flow["bottle_mm"] - lead
+                      for h in changed if h in hands_reached(b["code"])), default=float("inf"))
+        return earliest, latest
+
+    def _pump(self, now_ms: int) -> list[Action]:
+        """보낼 차례인 병이 있으면 보낸다. ACK를 기다리는 동안에는 다음 병을 보내지 않는다."""
+        if self.sending or not self.queue:
+            return []
+        b = self.queue[0]
+        acts: list[Action] = []
+        late = False
+        if self.flow_ready():
+            self.flight = [f for f in self.flight
+                           if self.pos_mm < max(self._passed(f, h) for h in hands_reached(f["code"]))]
+            earliest, latest = self._window(b)
+            if self.pos_mm < earliest:                # 앞 병이 아직 날개판 앞 → 기다림
+                if earliest > latest and not b.get("warned"):
+                    b["warned"] = True                # 간격이 좁아 둘 다 맞게 보낼 수 없음 → 앞 병을 지킴
+                    acts.append(self._safety(0, "ERROR", "TOO_CLOSE"))
+                return acts
+            late = self.pos_mm > latest
+        self.queue.pop(0)
+        self.sending = b | {"sent_at": now_ms, "retried": False, "late": late}
+        return acts + [("gateway", p.encode_judgment(b["code"]))]
 
     # ---------- 게이트웨이 (protocol.md 2절) ----------
     def _safety(self, level: int, event: str, cause: str) -> Action:
@@ -125,6 +225,7 @@ class LineController:
             self.mode = new
             acts.append(("publish", "mode", {"ts": p.now_iso(), "src": "app", "mode": int(new), "by": "hand3"}))
             if new == p.Mode.LOCKOUT:
+                self.flaps = (False, False)           # 점검 잠금이면 손 1·2가 날개판을 나란히 접는다
                 acts += [("arduino", "HOLD")] + self._abort("lockout")
             elif new == p.Mode.PAUSE:
                 acts += self._abort("pause")
@@ -146,9 +247,15 @@ class LineController:
                 self.link = ok
                 if not ok:
                     acts.append(self._safety(0, "ERROR", "LINK_LOST"))
+        elif msg.kind == "ACK" and self.sending and msg.b == p.CODE_TO_JDG[self.sending["code"]]:
+            b, self.sending = self.sending, None
+            self.flaps = flaps_for(b["code"])
+            self.flight.append(b)
+            acts.append(self._sort_msg(b["id"], "SENT", hand=p.CODE_TO_HAND[b["code"]], seq=msg.a, late=b["late"]))
+            acts += self._pump(now_ms)
         elif msg.kind == "ACK" and self.state == "WAIT_ACK" and msg.b == p.CODE_TO_JDG.get(self.code or ""):
-            acts.append(("publish", "sort", {"ts": p.now_iso(), "src": "app", "id": self.bottle_id,
-                                             "hand": p.CODE_TO_HAND[self.code], "result": "SENT", "seq": msg.a}))
+            self.flaps = flaps_for(self.code)
+            acts.append(self._sort_msg(self.bottle_id, "SENT", hand=p.CODE_TO_HAND[self.code], seq=msg.a))
             acts += self._resume(now_ms)
         return acts
 
@@ -166,32 +273,44 @@ class LineController:
         elif kind == "ARRIVE":                      # IR 도착 센서가 스스로 멈춤 (웹캠 감지의 보조)
             self.belt = "PAUSE"
             if self.state == "IDLE":
-                self._new_bottle("IR", now_ms)
+                if self.stop_to_judge:
+                    self._new_bottle("IR", now_ms)
+                else:
+                    self._resume_after = True
+                    return self._capture_now("IR", now_ms)
         elif kind == "STOP":
             self.belt = "STOP"
             self.stop_cause = parts[2] if len(parts) > 2 else "UNKNOWN"
-            return [("publish", "safety", {"ts": p.now_iso(), "src": "app", "level": 2, "event": "STOP",
-                                           "cause": self.stop_cause})] + self._abort("stop")
+            return [self._safety(2, "STOP", self.stop_cause)] + self._abort("stop")
         elif kind == "RUN":
             self.belt, self.stop_cause = "RUN", None
             if self.danger == p.Danger.STOP:
                 self.danger = p.Danger.NONE
-            return [("publish", "safety", {"ts": p.now_iso(), "src": "app", "level": 0, "event": "RUN",
-                                           "cause": "RESET"})]
+            return [self._safety(0, "RUN", "RESET")]
         return []
 
     # ---------- 시간 ----------
     def tick(self, now_ms: int) -> list[Action]:
         """대기 시간 처리. 실행 루프가 주기적으로 부른다."""
+        if self._last_tick is not None and self.belt == "RUN":
+            self.pos_mm += self._speed_mm_s() * (now_ms - self._last_tick) / 1000
+        self._last_tick = now_ms
+        acts: list[Action] = []
+        if self.sending and now_ms - self.sending["sent_at"] > self.ack_timeout_ms:
+            if not self.sending["retried"]:
+                self.sending["retried"], self.sending["sent_at"] = True, now_ms
+                return [("gateway", p.encode_judgment(self.sending["code"]))]
+            return [("arduino", "HOLD"), self._safety(0, "ERROR", "NO_ACK")] + self._abort("no_ack")
+        acts += self._pump(now_ms)
         if self.state == "SETTLE" and now_ms >= self._due_ms:
             self.state = "CAPTURE"
-            return [("capture", self.bottle_id)]
+            return acts + [("capture", self.bottle_id)]
         if self.state == "RESUME_WAIT" and now_ms >= self._due_ms:
             self.state = "LEAVE"
-            return [("arduino", "GO")]
+            return acts + [("arduino", "GO")]
         if self.state == "WAIT_ACK" and now_ms - self._sent_at_ms > self.ack_timeout_ms:
             if not self._retried:
                 self._retried, self._sent_at_ms = True, now_ms
-                return [("gateway", p.encode_judgment(self.code or p.RECHECK))]
-            return [("arduino", "HOLD"), self._safety(0, "ERROR", "NO_ACK")] + self._abort("no_ack")
-        return []
+                return acts + [("gateway", p.encode_judgment(self.code or p.RECHECK))]
+            return acts + [("arduino", "HOLD"), self._safety(0, "ERROR", "NO_ACK")] + self._abort("no_ack")
+        return acts

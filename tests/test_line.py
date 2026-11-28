@@ -104,7 +104,7 @@ def test_runner_mock_end_to_end(tmp_path, monkeypatch):
     belt = SimBelt()
     belt.press_reset()
     vision = MockVision(belt)
-    ctl = LineController(settle_ms=100, resume_delay_ms=200)
+    ctl = LineController(settle_ms=100, resume_delay_ms=200, stop_to_judge=True)
     rec = Recorder()
     r = LineRunner({"app": {}, "vision": {}}, vision, belt, ctl, rec, capture_dir=tmp_path)
     states = set()
@@ -123,3 +123,23 @@ def test_runner_mock_end_to_end(tmp_path, monkeypatch):
     assert (tmp_path / j["img"]).is_file() and (tmp_path / j["full"]).is_file()
     assert j["img"].startswith(j["img"][:8] + "/W_")      # 날짜 폴더 / W_ 파일 이름
     assert r.preview()                                    # 대시보드 실시간 화면
+
+
+def test_runner_mock_end_to_end_without_stopping(tmp_path, monkeypatch):
+    """기본 방식: 병이 지나가는 동안 찍고, 우노에 PAUSE·GO를 한 번도 보내지 않는다."""
+    clock = {"t": 0}
+    monkeypatch.setattr("app.line.now_ms", lambda: clock["t"])
+    belt = SimBelt()
+    belt.press_reset()
+    vision = MockVision(belt)
+    ctl = LineController()
+    rec = Recorder()
+    r = LineRunner({"app": {}, "vision": {}}, vision, belt, ctl, rec, capture_dir=tmp_path)
+    for _ in range(3000):                                 # 60초 흉내
+        clock["t"] += 20
+        r.step()
+        if sum(1 for t, _ in rec.msgs if t == "pet/judgment") >= 3:
+            break
+    assert sum(1 for t, _ in rec.msgs if t == "pet/judgment") >= 3
+    assert "PAUSE" not in belt.sent and "GO" not in belt.sent
+    assert belt.run == "RUN"
