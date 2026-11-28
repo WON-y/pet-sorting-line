@@ -8,5 +8,6 @@ COPY communication ./communication
 COPY vision ./vision
 COPY app ./app
 COPY config ./config
-ENV MQTT_HOST=mqtt MQTT_PORT=1883
-CMD ["python", "-m", "app", "--mock"]
+# 도커에서는 대시보드가 따로 있으므로 MQTT로 기록하고 웹 서버는 켜지 않는다
+ENV MQTT_HOST=mqtt MQTT_PORT=1883 RECORD=mqtt
+CMD ["python", "-m", "app", "--mock", "--no-web"]

@@ -127,9 +127,16 @@ def parse_gateway_line(line: str) -> tuple[str, str] | None:
     return None
 
 
+# ---------- 게이트웨이 → 우노 모드 핀 (protocol.md 3절) ----------
+# (P1,P0) 2비트. 카드·수신호 번호 → 핀 값. 선이 빠지면 11(점검 잠금)로 읽혀 멈춘다.
+UNO_PIN_MODES = {1: 0b01, 2: 0b10, 3: 0b00, 4: 0b11}
+UNO_RUN_MODES = (1, 2)          # 이 모드일 때만 리셋 버튼으로 재가동할 수 있다
+
 # ---------- 우노 시리얼 (protocol.md 4절) ----------
-ARDUINO_COMMANDS = ("SPD,N", "SPD,S", "GO", "HOLD", "ARM", "PING")
-STOP_CAUSES = ("IR", "DANGER", "HB", "HOLD")
+# 재가동 명령은 없다. 재가동은 리셋 버튼으로만 (safety_rules.md 1절).
+ARDUINO_COMMANDS = ("PAUSE", "GO", "HOLD", "PING")
+STOP_CAUSES = ("POWERON", "HB", "MODE", "ESTOP", "HOLD", "IR")
+BELT_STATES = ("RUN", "PAUSE", "STOP")
 
 
 def arduino_cmd(cmd: str) -> str:

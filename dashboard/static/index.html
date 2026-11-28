@@ -5,20 +5,50 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>페트병 선별 라인 대시보드</title>
 <style>
-  body{margin:0;font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;background:#f6f7f9;color:#1f2328}
-  header{display:flex;align-items:center;gap:16px;padding:14px 22px;background:#fff;border-bottom:1px solid #d9dde3}
+  :root{--bg:#f6f7f9;--card:#fff;--line:#d9dde3;--soft:#eceff3;--text:#1f2328;--muted:#5f6670;
+        --ok:#2e7d5a;--warn:#8a5a00;--bad:#b42318;--accent:#2457c5}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;background:var(--bg);color:var(--text)}
+  header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 22px;background:var(--card);border-bottom:1px solid var(--line)}
   h1{font-size:19px;margin:0}
   #lamp{width:18px;height:18px;border-radius:50%;background:#9ca3af}
   #stateText{font-weight:700}
-  main{max-width:1100px;margin:0 auto;padding:18px 22px}
+  main{max-width:1200px;margin:0 auto;padding:18px 22px}
   .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
-  .card{background:#fff;border:1px solid #d9dde3;border-radius:8px;padding:12px 14px}
-  .v{font-size:28px;font-weight:700}.l{font-size:13px;color:#5f6670}
+  .two{display:grid;grid-template-columns:3fr 2fr;gap:12px;align-items:start}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+  .v{font-size:28px;font-weight:700}.l{font-size:13px;color:var(--muted)}
   h2{font-size:16px;margin:22px 0 8px}
-  table{width:100%;border-collapse:collapse;background:#fff;font-size:13.5px}
-  th,td{border-bottom:1px solid #eceff3;padding:6px 8px;text-align:left}
-  th{background:#eceff3}
-  .STOP{color:#b42318;font-weight:700}.WARN{color:#8a5a00;font-weight:700}.RUN{color:#2e7d5a;font-weight:700}
+  h3{font-size:14px;margin:0 0 8px}
+  table{width:100%;border-collapse:collapse;background:var(--card);font-size:13.5px}
+  th,td{border-bottom:1px solid var(--soft);padding:6px 8px;text-align:left}
+  th{background:var(--soft)}
+  .STOP{color:var(--bad);font-weight:700}.WARN{color:var(--warn);font-weight:700}.RUN{color:var(--ok);font-weight:700}
+  .PAUSE{color:var(--warn);font-weight:700}
+  #liveWrap{position:relative;line-height:0;background:#111;border-radius:6px;overflow:hidden;touch-action:none}
+  #live{width:100%;display:block;user-select:none;-webkit-user-drag:none}
+  #roiBox{position:absolute;border:2px dashed #ffd400;display:none;pointer-events:none}
+  #liveWrap.drawing{cursor:crosshair;outline:3px solid #ffd400}
+  .msg{font-size:13px;color:var(--muted);margin-top:6px;line-height:1.5}
+  .pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12.5px;font-weight:700;background:var(--soft)}
+  .btns{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+  button{font:inherit;font-size:13.5px;padding:7px 11px;border:1px solid var(--line);border-radius:6px;background:var(--card);cursor:pointer}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.danger{border-color:var(--bad);color:var(--bad)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  #lastImg{width:100%;max-height:260px;object-fit:contain;background:var(--soft);border-radius:6px;display:block}
+  .code{font-size:26px;font-weight:800}
+  .c-OK{color:var(--ok)}.c-NG{color:var(--bad)}.c-CO{color:#6d3fb5}.c-RE{color:var(--warn)}
+  .gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+  .shot{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px;font-size:12.5px}
+  .shot img{width:100%;aspect-ratio:1;object-fit:contain;background:var(--soft);border-radius:4px;display:block}
+  .shot select{width:100%;margin-top:4px;font:inherit;font-size:12.5px}
+  .shot.wrong{border-color:var(--bad)}
+  .shot.labeled{border-color:var(--ok)}
+  .hide{display:none!important}
+  a{color:var(--accent)}
+  @media (max-width:800px){.grid{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}main{padding:14px 16px}}
 </style>
 </head>
 <body>
@@ -29,6 +59,60 @@
   <span class="l" id="modeText"></span>
 </header>
 <main>
+  <!-- 실시간 화면 + 최근 판정 (python -m app 으로 실행했을 때) -->
+  <section id="lineSection" class="hide">
+    <div class="two">
+      <div class="card">
+        <h3>실시간 화면 <span class="l" id="visionInfo"></span></h3>
+        <div id="liveWrap"><img id="live" alt="웹캠 화면" draggable="false"><div id="roiBox"></div></div>
+        <div class="msg" id="visionMsg"></div>
+      </div>
+      <div class="card">
+        <h3>최근 판정</h3>
+        <img id="lastImg" alt="최근 판정 사진">
+        <div style="margin-top:8px"><span class="code" id="lastCode">-</span> <span id="lastCls"></span></div>
+        <div class="l" id="lastMeta">아직 판정한 병이 없습니다</div>
+      </div>
+    </div>
+
+    <div class="card hide" id="phoneCard" style="margin-top:12px">
+      <h3>휴대폰 카메라 <span class="pill" id="phonePill">-</span></h3>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start">
+        <img id="phoneQr" alt="휴대폰 접속 QR" style="width:180px;height:180px;background:#fff;border-radius:6px">
+        <div class="msg" style="flex:1;min-width:220px;margin-top:0">
+          1. 휴대폰을 노트북과 <b>같은 와이파이</b>에 연결하고 QR을 찍습니다.<br>
+          2. "안전하지 않음" 경고가 뜨면 <b>고급 → 계속</b> (노트북이 만든 시험용 인증서).<br>
+          3. "카메라 켜고 보내기" → 카메라 허용. 휴대폰은 거치대에 <b>고정</b>하세요.<br>
+          4. 화면이 들어오면 "빈 벨트 기준 저장".<br>
+          <select id="phoneUrlSel" class="hide" style="margin-top:6px;font:inherit;font-size:12.5px"></select>
+          <div id="phoneUrl" style="word-break:break-all;margin-top:4px"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:12px">
+      <h3>시험 조작</h3>
+      <div>벨트 <span class="pill" id="beltPill">-</span> <span class="l" id="beltInfo"></span>
+        · 진행 <span class="pill" id="linePill">-</span></div>
+      <div class="btns" id="simBtns">
+        <button class="primary" data-act="reset" title="가상 벨트의 리셋 버튼 (모드 1·2일 때만 출발)">리셋 버튼 (출발)</button>
+        <button data-act="mode" data-mode="1">모드 1 자동</button>
+        <button data-act="mode" data-mode="2">모드 2 저속</button>
+        <button data-act="mode" data-mode="3">모드 3 정지</button>
+        <button data-act="mode" data-mode="4">모드 4 점검 잠금</button>
+      </div>
+      <div class="btns">
+        <button class="danger" data-act="hold">정지 (HOLD)</button>
+        <button data-act="baseline" title="병·손이 없는 빈 벨트일 때 누르기">빈 벨트 기준 저장</button>
+        <button id="roiBtn">판정 구역 그리기</button>
+        <button data-act="roi-clear">판정 구역 초기화</button>
+        <button data-act="capture">지금 촬영</button>
+      </div>
+      <div class="msg" id="ctlMsg"></div>
+    </div>
+  </section>
+
+  <h2>집계</h2>
   <div class="grid">
     <div class="card"><div class="v" id="ok">0</div><div class="l">투명 적합 (OK)</div></div>
     <div class="card"><div class="v" id="ng">0</div><div class="l">부적합 (NG)</div></div>
@@ -36,32 +120,175 @@
     <div class="card"><div class="v" id="re">0</div><div class="l">재검사 (RE) · <span id="rr">0%</span></div></div>
   </div>
   <div class="grid" style="margin-top:12px">
-    <div class="card"><div class="v" id="stops">0</div><div class="l">위험 정지</div></div>
+    <div class="card"><div class="v" id="stops">0</div><div class="l">정지</div></div>
     <div class="card"><div class="v" id="nearMiss">0</div><div class="l">아차사고 (경고 + 정지)</div></div>
     <div class="card"><div class="v" id="total">0</div><div class="l">판정한 병</div></div>
-    <div class="card"><div class="v" id="danger">-</div><div class="l">안전 단계</div></div>
+    <div class="card"><div class="v" id="labeled">0</div><div class="l">정답 확인한 사진 · 틀린 판정 <span id="wrong">0</span></div></div>
   </div>
+
+  <h2>촬영 사진 (재학습용)
+    <label class="l" style="font-weight:400;margin-left:8px"><input type="checkbox" id="onlyUnlabeled"> 정답 안 단 것만</label>
+    <a class="l" href="/api/captures.csv" style="margin-left:8px">정답 단 목록 내려받기 (manifest CSV)</a></h2>
+  <div class="msg" style="margin-top:0">사진은 <code>data/captures/</code>에 저장됩니다. 정답을 고르면 나중에 벨트 사진(W)으로 미세조정할 때 씁니다. 흐리거나 잘린 사진은 "학습에서 빼기".</div>
+  <div class="gallery" id="gallery" style="margin-top:8px"></div>
+
   <h2>최근 이벤트</h2>
   <table><thead><tr><th>시각</th><th>종류</th><th>병</th><th>내용</th></tr></thead><tbody id="events"></tbody></table>
 </main>
 <script>
 const COLORS={AUTO:"#2e7d5a",SLOW:"#d4a017",WARN:"#d4a017",LOCKOUT:"#b42318",STOP:"#b42318"};
 const NAMES={AUTO:"자동 운전",SLOW:"저속",WARN:"접근 경고",LOCKOUT:"점검 잠금",STOP:"위험 정지"};
+const LINE_NAMES={IDLE:"병 기다림",SETTLE:"멈추는 중",CAPTURE:"촬영·판정",WAIT_ACK:"손 응답 대기",WAIT_SORT:"분기 중",
+  RESUME_WAIT:"곧 출발",LEAVE:"병이 빠지길 기다림"};
+const DETECT_NAMES={NO_BASELINE:"빈 벨트 기준 없음",EMPTY:"비어 있음",EDGE:"가장자리에 걸침",INSIDE:"완전히 들어옴"};
+const LATCH_NAMES={POWERON:"전원 켬",HB:"하트비트 끊김",MODE:"모드 정지·잠금",ESTOP:"비상정지",HOLD:"HOLD",IR:"IR 커튼"};
+const CLASS_NAMES={clear_nolabel:"투명·라벨 없음",clear_label:"투명·라벨 있음",color_nolabel:"유색·라벨 없음",color_label:"유색·라벨 있음"};
 const $=id=>document.getElementById(id);
-const esc=t=>String(t).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const esc=t=>String(t??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const capUrl=p=>"/captures/"+String(p).split("/").map(encodeURIComponent).join("/");
+let lineOn=false, vinfo=null, previewMs=250;
+
+async function post(url,body){
+  const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.detail||r.statusText);
+  return j;
+}
+
+// ---------- 집계·이벤트 ----------
 async function refresh(){
   try{
     const s=await (await fetch("/api/summary")).json();
     $("ok").textContent=s.bins.OK;$("ng").textContent=s.bins.NG;$("co").textContent=s.bins.CO;$("re").textContent=s.bins.RE;
     $("rr").textContent=(s.recheck_rate*100).toFixed(1)+"%";$("stops").textContent=s.stops;$("nearMiss").textContent=s.near_miss;$("total").textContent=s.total;
+    $("labeled").textContent=`${s.captures.labeled} / ${s.captures.total}`;$("wrong").textContent=s.captures.wrong;
     const st=s.state||{};const key=st.state||"";
-    $("lamp").style.background=COLORS[key]||"#9ca3af";$("stateText").textContent=NAMES[key]||"상태 없음";
-    $("modeText").textContent=st.mode?`모드 ${st.mode} · 벨트 ${st.run}`:"";$("danger").textContent=st.danger??"-";
+    $("lamp").style.background=st.run==="STOP"?COLORS.STOP:(COLORS[key]||"#9ca3af");
+    $("stateText").textContent=st.run==="STOP"?"벨트 정지":(NAMES[key]||"상태 없음");
+    $("modeText").textContent=st.mode?`모드 ${st.mode} · 벨트 ${st.run}`:"";
+    if(s.line && !lineOn){lineOn=true;$("lineSection").classList.remove("hide");loadLive();}
     const ev=await (await fetch("/api/events?limit=20")).json();
-    $("events").innerHTML=ev.map(e=>`<tr><td>${(e.ts||"").slice(11,19)}</td><td class="${esc(e.type)}">${esc(e.type)}</td><td>${e.bottle??""}</td><td>${esc(JSON.stringify(e.payload).slice(0,90))}</td></tr>`).join("");
+    $("events").innerHTML=ev.map(e=>`<tr><td>${esc((e.ts||"").slice(11,19))}</td><td class="${esc(e.type)}">${esc(e.type)}</td><td>${e.bottle??""}</td><td>${esc(JSON.stringify(e.payload).slice(0,110))}</td></tr>`).join("");
   }catch(err){$("stateText").textContent="대시보드 서버 연결 안 됨";}
 }
-refresh();setInterval(refresh,2000);
+
+// ---------- 라인 상태 ----------
+async function refreshLine(){
+  if(!lineOn) return;
+  try{
+    const s=await (await fetch("/api/line")).json();
+    vinfo=s.vision;
+    const b=s.belt;
+    $("beltPill").textContent=b.run;$("beltPill").className="pill "+b.run;
+    $("beltInfo").textContent=(b.sim?"가상 벨트":"실제 우노")+(b.mode?` · 모드 ${b.mode}`:"")+(b.latch?` · 잠김: ${LATCH_NAMES[b.latch]||b.latch}`:"")+` · 속도 ${b.speed==="S"?"저속":"보통"}`;
+    $("linePill").textContent=LINE_NAMES[s.line]||s.line;
+    $("simBtns").classList.toggle("hide",!b.sim);
+    $("visionInfo").textContent=`${vinfo.mock?"모의 화면":vinfo.source} · ${vinfo.width}×${vinfo.height} · ${vinfo.model||""}`;
+    let m=`감지: ${DETECT_NAMES[vinfo.detect]||vinfo.detect}`;
+    if(!vinfo.baseline) m+=" — 병이 없는 빈 벨트에서 '빈 벨트 기준 저장'을 누르세요";
+    m+=vinfo.roi?` · 판정 구역 [${vinfo.roi.join(", ")}] (settings.yaml vision.roi에 적어 두면 다음에도 씀)`:" · 판정 구역: 화면 전체";
+    if(b.run==="STOP" && b.sim) m+=" · 벨트가 잠겨 있습니다: 모드 1·2에서 '리셋 버튼'을 누르면 출발";
+    if(s.error) m+=` · ⚠ ${s.error}`;
+    $("visionMsg").textContent=m;
+    showPhone(vinfo.phone);
+    const j=s.last;
+    if(j){
+      if(j.img) $("lastImg").src=capUrl(j.img);
+      $("lastCode").textContent=j.code;$("lastCode").className="code c-"+j.code;
+      $("lastCls").textContent=`${CLASS_NAMES[j.cls]||j.cls||"-"}`;
+      const d=j.detail;
+      const det=d?` · 색: ${d.color==="clear"?"투명":"유색"} ${(d.color_conf*100).toFixed(0)}% · 라벨: ${d.label==="label"?"있음":"없음"} ${(d.label_conf*100).toFixed(0)}%`:"";
+      $("lastMeta").textContent=`병 ${j.id} · 신뢰도 ${(j.conf*100).toFixed(1)}%${det} · ${(j.ts||"").slice(11,19)} · ${({CAM:"웹캠 감지",IR:"IR 센서",MANUAL:"수동 촬영"})[j.trigger]||""}`;
+    }
+  }catch(err){$("visionMsg").textContent="라인 상태를 읽지 못했습니다";}
+}
+
+// ---------- 휴대폰 카메라 (python -m app --phone) ----------
+let phoneUrls="";
+function showPhone(ph){
+  $("phoneCard").classList.toggle("hide",!ph);
+  if(!ph) return;
+  $("phonePill").textContent=ph.connected?"연결됨":(ph.frames?"끊김":"접속 기다림");
+  $("phonePill").className="pill "+(ph.connected?"RUN":(ph.frames?"STOP":""));
+  const key=JSON.stringify(ph.urls);
+  if(key===phoneUrls) return;
+  phoneUrls=key;
+  const sel=$("phoneUrlSel");
+  sel.innerHTML=ph.urls.map((u,i)=>`<option value="${i}">${esc(u.split("/phone")[0])}</option>`).join("");
+  sel.classList.toggle("hide",ph.urls.length<2);   // 노트북 주소가 여러 개면 휴대폰과 같은 와이파이 것을 고름
+  const pick=()=>{const i=Number(sel.value||0);$("phoneQr").src="/api/phone/qr.svg?i="+i+"&t="+Date.now();$("phoneUrl").textContent=ph.urls[i]||"와이파이 주소를 찾지 못했습니다 (settings.yaml phone.host_ip)";};
+  sel.onchange=pick;pick();
+}
+
+// 실시간 화면: 한 장 받으면 다음 장 요청
+function loadLive(){
+  const img=$("live");
+  const next=()=>setTimeout(()=>{img.src="/api/line/frame.jpg?t="+Date.now();},previewMs);
+  img.onload=next;img.onerror=()=>setTimeout(next,1000);
+  img.src="/api/line/frame.jpg?t="+Date.now();
+}
+
+// ---------- 시험 버튼 ----------
+document.querySelectorAll("button[data-act]").forEach(btn=>btn.addEventListener("click",async()=>{
+  const act=btn.dataset.act;
+  try{
+    let r;
+    if(act==="mode") r=await post("/api/line/mode",{mode:Number(btn.dataset.mode)});
+    else if(act==="roi-clear") r=await post("/api/line/roi",{roi:null});
+    else r=await post("/api/line/"+act);
+    const msgs={reset:{OK:"출발했습니다",MODE_NOT_1_OR_2:"모드가 1·2가 아니라서 출발하지 않습니다",NOT_LATCHED:"이미 잠김이 아닙니다"}};
+    $("ctlMsg").textContent=(msgs[act]&&msgs[act][r.result])||"완료: "+btn.textContent;
+  }catch(e){$("ctlMsg").textContent="안 됨: "+e.message;}
+  refreshLine();
+}));
+
+// ---------- 판정 구역 그리기 (실시간 화면 위를 끌기) ----------
+let drawing=false,start=null;
+const wrap=$("liveWrap"),box=$("roiBox");
+$("roiBtn").addEventListener("click",()=>{drawing=!drawing;wrap.classList.toggle("drawing",drawing);
+  $("ctlMsg").textContent=drawing?"화면 위를 끌어서 판정 구역을 그리세요":"";});
+function rel(ev){const r=wrap.getBoundingClientRect();return {x:Math.min(Math.max(ev.clientX-r.left,0),r.width),y:Math.min(Math.max(ev.clientY-r.top,0),r.height),w:r.width,h:r.height};}
+wrap.addEventListener("pointerdown",ev=>{if(!drawing)return;start=rel(ev);wrap.setPointerCapture(ev.pointerId);box.style.display="block";});
+wrap.addEventListener("pointermove",ev=>{if(!drawing||!start)return;const p=rel(ev);
+  Object.assign(box.style,{left:Math.min(start.x,p.x)+"px",top:Math.min(start.y,p.y)+"px",width:Math.abs(p.x-start.x)+"px",height:Math.abs(p.y-start.y)+"px"});});
+wrap.addEventListener("pointerup",async ev=>{
+  if(!drawing||!start)return;const p=rel(ev);const s=start;start=null;box.style.display="none";
+  drawing=false;wrap.classList.remove("drawing");
+  if(!vinfo)return;
+  const sx=vinfo.width/p.w, sy=vinfo.height/p.h;
+  const roi=[Math.round(Math.min(s.x,p.x)*sx),Math.round(Math.min(s.y,p.y)*sy),Math.round(Math.max(s.x,p.x)*sx),Math.round(Math.max(s.y,p.y)*sy)];
+  try{await post("/api/line/roi",{roi});$("ctlMsg").textContent=`판정 구역 [${roi.join(", ")}] — 이제 빈 벨트 기준을 다시 저장하세요`;}
+  catch(e){$("ctlMsg").textContent="안 됨: "+e.message;}
+  refreshLine();
+});
+
+// ---------- 촬영 사진 갤러리 ----------
+const LABEL_OPTS=[["","정답 선택…"],["clear_nolabel","투명·라벨 없음"],["clear_label","투명·라벨 있음"],["color_nolabel","유색·라벨 없음"],["color_label","유색·라벨 있음"],["exclude","학습에서 빼기"]];
+let galleryKey="";
+async function refreshGallery(){
+  try{
+    const rows=await (await fetch("/api/captures?limit=24&unlabeled="+$("onlyUnlabeled").checked)).json();
+    const key=JSON.stringify(rows.map(r=>[r.id,r.label]));
+    if(key===galleryKey) return;   // 바뀐 게 없으면 다시 그리지 않음 (선택 중인 목록이 닫히지 않게)
+    galleryKey=key;
+    $("gallery").innerHTML=rows.length?rows.map(r=>{
+      const wrong=r.label&&r.label!=="exclude"&&r.label!==r.pred_cls;
+      return `<div class="shot ${wrong?"wrong":(r.label?"labeled":"")}">
+        <a href="${capUrl(r.full||r.img)}" target="_blank" rel="noopener"><img loading="lazy" src="${capUrl(r.img)}" alt="병 ${r.bottle}"></a>
+        <div><b class="c-${esc(r.code)}">${esc(r.code)}</b> ${esc(CLASS_NAMES[r.pred_cls]||r.pred_cls)} ${r.conf!=null?(r.conf*100).toFixed(0)+"%":""}</div>
+        <div class="l">병 ${r.bottle??""} · ${esc((r.ts||"").slice(5,10))} ${esc((r.ts||"").slice(11,19))}</div>
+        <select data-id="${r.id}">${LABEL_OPTS.map(([v,t])=>`<option value="${v}" ${v===r.label?"selected":""}>${t}</option>`).join("")}</select>
+      </div>`;}).join(""):`<div class="l">아직 촬영한 사진이 없습니다</div>`;
+    $("gallery").querySelectorAll("select").forEach(sel=>sel.addEventListener("change",async()=>{
+      try{await post(`/api/captures/${sel.dataset.id}/label`,{label:sel.value});galleryKey="";refreshGallery();refresh();}
+      catch(e){alert("저장 실패: "+e.message);}
+    }));
+  }catch(err){}
+}
+$("onlyUnlabeled").addEventListener("change",()=>{galleryKey="";refreshGallery();});
+
+refresh();refreshGallery();
+setInterval(refresh,2000);setInterval(refreshLine,700);setInterval(refreshGallery,3000);
 </script>
 </body>
 </html>

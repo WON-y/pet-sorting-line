@@ -3,12 +3,16 @@
 - 실행 위치: 노트북 (도커 아님, 웹캠 때문)
 - 카메라: USB 웹캠 Coms TB591 (1080p, LED 조명 내장), 클램프 스탠드 + 매직암으로 벨트 위 30~40cm에 고정, 수직으로 내려찍음
 - 모델: Ultralytics YOLO 분류 모델(사진 전체 분류, 탐지 아님), 입력 224×224. 여러 모델을 비교해 고른다 → `training/README.md`
-- 가중치: `training/weights/best.pt` (`settings.yaml: vision.weights`)
+- 모델 2개: **색 모델**(clear/color) + **라벨 모델**(label/nolabel) → 합쳐서 4클래스 (`classifier.py`의 `combine`)
+- 가중치: `training/weights/color_best.pt`, `label_best.pt` (`settings.yaml: vision.color_model`, `vision.label_model`). 아직 없으면 모두 재검사(RE). 예전 4클래스 `best.pt`는 `vision.model_mode: single`
 - WonderCam에는 직접 학습한 모델을 올릴 방법이 문서에 없어, 판정은 노트북에서 한다.
 
 ## 흐름
 
-IR 도착 → 벨트 멈춤 → 판정 구역 **1프레임** 촬영 → 판정 구역 자르기 + 224×224 회색 레터박스 → 4클래스 분류 → 신뢰도 ≥ 0.6이면 확정, 아니면 `RE`(재검사 → 부적합 슈트)
+웹캠 도착 감지(빈 벨트 기준과 비교, 병이 판정 구역 안에 완전히 들어옴) → 벨트 `PAUSE` → **1프레임** 촬영 → 병 둘레 자르기(`crop_mode: box`) + 224×224 회색 레터박스 → 4클래스 분류 → 신뢰도 ≥ 0.6이면 확정, 아니면 `RE`(재검사 → 부적합 슈트) → 사진 저장(`data/captures/`) → 자동 출발
+
+- IR 도착 센서는 나중에 보조로 쓴다 (우노 `USE_IR_ARRIVE`, `EVT,ARRIVE`).
+- 감지는 카메라가 **고정**돼 있어야 한다. 손으로 든 휴대폰 영상은 화면 전체가 움직여 계속 "가장자리에 걸침"이 된다.
 
 - 벨트가 멈춘 상태라 흔들림이 없어 여러 프레임을 모으지 않는다 (`vision.frames: 1`).
 - 4클래스와 2단계 분기(손 1: 유색 → 기타, 손 2: 투명·라벨 → 부적합)는 `docs/spec/modes_and_states.md` 4절.
@@ -19,9 +23,12 @@ IR 도착 → 벨트 멈춤 → 판정 구역 **1프레임** 촬영 → 판정 �
 | 파일 | 내용 |
 | --- | --- |
 | `preprocess.py` | `crop_roi`, `letterbox`, `prepare` — **학습과 판정이 같이 쓰는 전처리** |
-| `classifier.py` | `BottleClassifier` (ultralytics는 사용할 때만 import) |
+| `classifier.py` | `SplitClassifier`(색 + 라벨 모델), `BottleClassifier`(4클래스 하나), `load_classifier`, `combine` (ultralytics는 사용할 때만 import) |
 | `decide.py` | 신뢰도 기준 판정 규칙 → (클래스, 판정 코드). 기본 1프레임 |
 | `camera.py` | OpenCV 웹캠 읽기 (RGB) |
+| `detect.py` | 웹캠 병 도착 감지 (`ArrivalDetector`, 하드웨어 없이 시험하는 `StreakCounter`) |
+| `pipeline.py` | `CameraVision` — 웹캠·녹화 영상 → 감지 → 촬영 → 판정 → 대시보드 미리보기 (app이 사용) |
+| `phone.py` | `PhoneVision` — 웹캠 대신 휴대폰 카메라 사진으로 같은 일 (`python -m app --phone`, `app/README.md`) |
 
 ## 규칙
 

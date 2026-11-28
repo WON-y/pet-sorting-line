@@ -61,8 +61,10 @@ def test_gateway_and_arduino_lines():
     assert p.parse_gateway_line("PIN:STOP") == ("PIN", "STOP")
     assert p.parse_gateway_line("garbage") is None
     assert p.arduino_cmd("GO") == "GO\n"
-    with pytest.raises(ValueError):
-        p.arduino_cmd("RESET")   # 재가동은 버튼으로만
+    assert p.arduino_cmd("PAUSE") == "PAUSE\n"
+    for cmd in ("RESET", "RUN", "ARM", "SPD,N"):
+        with pytest.raises(ValueError):
+            p.arduino_cmd(cmd)   # 재가동은 리셋 버튼으로만, 속도는 모드 핀으로만
     assert p.parse_arduino_line("EVT,STOP,IR") == ("EVT", "STOP", "IR")
 
 
@@ -71,3 +73,10 @@ def test_topics():
     assert p.topic("hand", sub=1) == "pet/hand/1"
     with pytest.raises(ValueError):
         p.topic("unknown")
+
+
+def test_uno_mode_pins_fail_safe():
+    # 선이 빠지면 INPUT_PULLUP으로 11 → 점검 잠금(4) = 멈춤. 1·2만 리셋으로 출발 가능
+    assert p.UNO_PIN_MODES == {1: 0b01, 2: 0b10, 3: 0b00, 4: 0b11}
+    assert p.UNO_RUN_MODES == (1, 2)
+    assert set(p.STOP_CAUSES) >= {"POWERON", "HB", "MODE", "HOLD"}

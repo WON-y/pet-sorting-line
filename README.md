@@ -19,19 +19,23 @@ AI가 컨베이어 위 페트병을 배출 기준대로 판정하고(투명 적�
 
 ## 빠른 시작
 
+도커 없이 노트북 한 프로그램으로 라인 + 대시보드가 같이 뜹니다.
+
 ```bash
-# 1) 대시보드와 MQTT (도커)
-cp .env.example .env
-docker compose up -d
-# 브라우저: http://localhost:8000
+# 1) 하드웨어 없이 전체 흐름 보기 (가짜 화면)
+pip install -r requirements.txt
+python -m app --mock                 # 브라우저: http://localhost:8000
 
-# 2) 하드웨어 없이 전체 흐름 보기
-docker compose --profile mock up
-
-# 3) 노트북 파이썬 환경 (실제 하드웨어: 웹캠·YOLO·MediaPipe 포함)
+# 2) 웹캠 + YOLO (벨트·우노가 없으면 가상 벨트로, 대시보드 '시험 조작'에서 조작)
 pip install -r requirements-hw.txt
-python -m app            # .env에 GATEWAY_PORT, ARDUINO_PORT 설정
+cp .env.example .env                 # 우노를 연결하면 ARDUINO_PORT 설정
+python -m app
+
+# (선택) 도커: 대시보드를 따로 띄울 때
+docker compose up -d
 ```
+
+판정 사진은 `data/captures/`(재학습용, 깃허브에 올리지 않음), 기록은 `data/logs/pet.db`에 쌓입니다. 사용법은 [`app/README.md`](app/README.md).
 
 ## 규격 문서 (작업 전에 읽기)
 

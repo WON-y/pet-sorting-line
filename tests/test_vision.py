@@ -44,3 +44,65 @@ def test_gesture_needs_consecutive_frames():
     assert [g.update(2) for _ in range(3)] == [None, None, 2]
     assert g.update(2) is None            # 같은 손짓은 한 번만 확정
     assert [g.update(3) for _ in range(3)] == [None, None, None]   # 3개는 규칙에 없음
+
+
+# ---------- 색 모델 + 라벨 모델 (vision.model_mode: split) ----------
+import pytest  # noqa: E402
+
+from vision.bottle.classifier import COLOR_VALUES, LABEL_VALUES, combine, load_classifier, map_names, model_status  # noqa: E402
+
+
+def test_combine_two_models_into_four_classes():
+    assert combine("clear", 0.9, "nolabel", 0.8) == ("clear_nolabel", 0.8)   # 투명: 두 모델 중 낮은 값
+    assert combine("clear", 0.9, "label", 0.95) == ("clear_label", 0.9)
+    assert combine("color", 0.9, "label", 0.3) == ("color_label", 0.9)       # 유색: 라벨 모델과 상관없이 CO
+    # 투명인데 라벨 모델이 확신 못 하면 재검사 (라벨 있는 병을 적합으로 통과시키지 않게)
+    cls, conf = combine("clear", 0.99, "nolabel", 0.5)
+    assert decide([(cls, conf)])[1] == "RE"
+    cls, conf = combine("color", 0.99, "nolabel", 0.5)
+    assert decide([(cls, conf)]) == ("color_nolabel", "CO")
+
+
+def test_map_model_names():
+    assert map_names({0: "clear", 1: "color"}, None, COLOR_VALUES) == {0: "clear", 1: "color"}
+    assert map_names(["투명", "유색"], {"투명": "clear", "유색": "color"}, COLOR_VALUES) == {0: "clear", 1: "color"}
+    with pytest.raises(ValueError):
+        map_names({0: "with_label", 1: "no_label"}, None, LABEL_VALUES)       # 이름이 안 맞으면 바로 알림
+    with pytest.raises(ValueError):
+        map_names({0: "label", 1: "label"}, None, LABEL_VALUES)               # 한쪽 클래스가 없음
+
+
+def test_missing_weights_reported_not_crash(tmp_path):
+    vcfg = {"model_mode": "split", "color_model": {"weights": str(tmp_path / "c.pt")},
+            "label_model": {"weights": str(tmp_path / "l.pt")}}
+    assert "가중치 없음" in model_status(vcfg)
+    with pytest.raises(FileNotFoundError):
+        load_classifier(vcfg)
+
+
+def test_runner_records_recheck_when_model_fails(tmp_path, monkeypatch):
+    from app.controller import LineController
+    from app.line import LineRunner
+    from app.mock import MockVision
+    from app.sim_belt import SimBelt
+
+    belt = SimBelt()
+    vision = MockVision(belt)
+
+    def broken(_img):
+        raise FileNotFoundError("색 모델 가중치가 없습니다")
+
+    monkeypatch.setattr(vision, "classify", broken)
+    msgs = []
+
+    class Rec:
+        def publish(self, topic, payload, retain=False):
+            msgs.append((topic, payload))
+
+    ctl = LineController(settle_ms=0)
+    r = LineRunner({"app": {}, "vision": {}}, vision, belt, ctl, Rec(), capture_dir=tmp_path)
+    r.execute(ctl.on_manual(0))
+    r.execute(ctl.tick(0))
+    j = [m for t, m in msgs if t == "pet/judgment"][0]
+    assert j["code"] == "RE" and "img" in j                    # 사진은 남기고 재검사
+    assert "가중치" in r.last_error

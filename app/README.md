@@ -1,23 +1,60 @@
 # 통합 실행 (노트북)
 
-- 실행: `python -m app` (실제 하드웨어) / `python -m app --mock` (하드웨어 없이)
-- 도커: 모의 실행만 `simulator` 컨테이너로 (`CONTAINER.md`)
-- **정지 경로에 끼지 않는다.** 이 프로그램이 죽어도 우노가 멈춘다.
+라인(웹캠 판정·상태 머신)과 대시보드(웹 + SQLite)를 **한 프로그램**으로 돌린다. 도커는 필요 없다.
+
+```bash
+pip install -r requirements-hw.txt     # 웹캠·YOLO (모의 실행만 하면 requirements.txt로 충분)
+python -m app --mock                   # 웹캠·벨트 없이 가짜 화면으로 전체 흐름 → http://localhost:8000
+python -m app                          # 웹캠 + best.pt. 우노 포트(.env ARDUINO_PORT)가 없으면 가상 벨트
+python -m app --video 녹화.mp4         # 웹캠 대신 녹화 영상 (벨트가 멈추면 영상도 멈춤)
+python -m app --phone                  # 웹캠 대신 휴대폰 카메라 (대시보드에 QR이 나옴)
+```
+
+- **정지 경로에 끼지 않는다.** 이 프로그램이 죽어도 우노가 멈춘다. 실제 우노는 대시보드로 재가동할 수 없다 (리셋 버튼만).
+- 도커: 모의 실행만 `simulator` 컨테이너로 (`CONTAINER.md`, `RECORD=mqtt`, `--no-web`)
+
+## 센서·벨트 없이 시험하기 (웹캠만 있을 때)
+
+1. 웹캠을 책상 위에서 아래로 내려다보게 **고정**한다 (손으로 들면 화면 전체가 흔들려 감지가 안 됨). 색지를 깔면 벨트 대신이 된다.
+2. `python -m app` → 브라우저 `http://localhost:8000`
+3. "판정 구역 그리기" → 실시간 화면 위를 끌어 구역 지정 (계속 쓰려면 표시된 좌표를 `settings.yaml` `vision.roi`에)
+4. 구역이 빈 상태에서 "빈 벨트 기준 저장"
+5. 가상 벨트: "모드 1 자동" → "리셋 버튼 (출발)"
+6. 병을 구역 안으로 밀어 넣고 손을 뺀다 → 벨트 PAUSE → 촬영·판정 → 최근 판정에 사진과 결과 → 2초 뒤 자동 출발 → 병을 치우면 다음 병 대기
+7. 아래 "촬영 사진"에서 정답을 골라 두면 재학습용 목록(`/api/captures.csv`)이 된다
+
+## 휴대폰 카메라를 웹캠 대신 쓰기 (`--phone`)
+
+1. 노트북과 휴대폰을 **같은 와이파이**에 연결한다 (학교 와이파이가 기기끼리 막혀 있으면 휴대폰 핫스팟에 노트북을 붙인다).
+2. `python -m app --phone` → 노트북 브라우저 `http://localhost:8000` 에 "휴대폰 카메라" QR이 나온다.
+3. 휴대폰으로 QR을 찍는다. "안전하지 않음" 경고 → **고급 → 계속** (노트북이 만든 시험용 인증서, `data/certs/`).
+4. "카메라 켜고 보내기" → 카메라 허용. 휴대폰은 거치대에 **고정**하고 화면을 켜 둔다.
+5. 대시보드에 화면이 들어오면 위의 3~6번(판정 구역 → 빈 벨트 기준 → 출발)과 같다.
+
+- 휴대폰이 접속되지 않으면 윈도우 방화벽에서 파이썬의 **개인 네트워크** 접근을 허용한다 (포트 `phone.port` 8443).
+- 노트북 주소가 여러 개면 QR 아래에서 휴대폰과 같은 와이파이 주소를 고른다 (또는 `phone.host_ip`).
+- 같은 와이파이에는 휴대폰 서버(사진 받기만)만 열리고, 대시보드(시험 버튼)는 노트북 안에 그대로 있다. QR 주소의 토큰이 맞아야 사진을 받는다.
+- 휴대폰이 `phone.timeout_ms` 동안 사진을 안 보내면 '끊김': 도착·비었음 신호를 내지 않는다 (판정만 멈춤, 안전 정지와는 무관).
+- `vision.roi`는 웹캠 화면 기준 좌표라 휴대폰 화면에서는 다시 그려야 할 수 있다.
 
 ## 구조
 
 | 파일 | 내용 |
 | --- | --- |
-| `controller.py` | `LineController` — 상태 머신 (`docs/spec/modes_and_states.md` 3·5절). 입력을 받아 할 일(Action) 목록을 돌려주는 순수 로직, pytest로 시험 |
-| `main.py` | 시리얼·웹캠·MQTT를 연결하고 루프를 돌림 |
-| `mock.py` | 가짜 게이트웨이·우노·판정 |
+| `controller.py` | `LineController` — 상태 머신 (`docs/spec/modes_and_states.md` 5절). 입력 → 할 일(Action) 목록, pytest로 시험 |
+| `line.py` | `LineRunner` — 웹캠·우노·게이트웨이·기록을 상태 머신에 연결하는 루프, 사진 저장, 대시보드 명령 처리 |
+| `main.py` | 설정을 읽어 조립하고 대시보드 웹 서버를 같은 프로그램에서 띄움 |
+| `sim_belt.py` | 가상 벨트 — 우노 펌웨어(`safety/belt_controller`)의 시리얼 동작 흉내 |
+| `phone_server.py` | `--phone`: 휴대폰 전용 https 서버 (페이지 `dashboard/static/phone.html`, 사진 받기) |
+| `mock.py` | 모의 화면(`MockVision`), 손 응답, 사람 흉내 (`--mock`) |
 
 ## 병 한 개의 흐름
 
-`EVT,ARRIVE` → capture → 1프레임 판정 → `pet/judgment` 발행 → (OK면 바로 `GO`) / (CO·NG·RE면 `TX:J<id>,<code>` → ACK → DONE → `GO`)
+웹캠 도착 감지 → `PAUSE` → `settle_ms` → 1프레임 촬영·판정 → `data/captures/`에 사진 저장 → `pet/judgment` 기록
+→ (`app.sorting: false`) `resume_delay_ms` 뒤 `GO` 자동 출발 → 병이 구역을 빠져나가면 다음 병
 
 ## 할 일
 
-- [ ] 손짓(gesture) 카메라를 루프에 연결 → 확정 시 `on_radio(MODE, by="gesture")` + `TX:M<n>`
-- [ ] 우노 `STATE` 주기 메시지 반영
-- [ ] 실제 하드웨어로 ACK 시간 초과 값 조정
+- [ ] 날개판 분기: 게이트웨이(`code/microbit/gateway_bridge.ts`)와 판정 메시지 형식 통일 후 `app.sorting: true`
+- [ ] 손짓(gesture) 카메라를 루프에 연결
+- [ ] Supabase 저장 클래스 (`dashboard/app/store.py`와 같은 메서드)

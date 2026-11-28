@@ -16,6 +16,8 @@ ENV_OVERRIDES = {
     "ARDUINO_PORT": ("serial", "arduino_port"),
     "MQTT_HOST": ("mqtt", "host"),
     "MQTT_PORT": ("mqtt", "port"),
+    "RECORD": ("app", "record"),
+    "DB_PATH": ("dashboard", "db_path"),
 }
 
 
