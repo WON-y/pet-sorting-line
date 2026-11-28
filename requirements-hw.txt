@@ -3,3 +3,6 @@
 ultralytics>=8.3
 opencv-python>=4.9
 mediapipe>=0.10
+# 휴대폰 카메라 (python -m app --phone, vision.webtest --https): https 인증서, 대시보드 QR
+cryptography>=42
+qrcode>=7.4

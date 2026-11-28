@@ -14,6 +14,10 @@ data/certs/
 /yolo*-cls.pt
 training/dataset/
 training/raw/
+# 벨트 촬영 사진 (재학습용, 손이 찍힐 수 있음)
+data/captures/
+data/mock/
+/captures/
 *.mp4
 *.mov
 # 개인정보 문서

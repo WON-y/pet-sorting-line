@@ -2,7 +2,8 @@
 
 ## 1. 이벤트 기록 (SQLite, dashboard 컨테이너)
 
-DB 파일: `data/logs/pet.db` (도커 볼륨으로 컨테이너 밖에 저장). dashboard가 MQTT를 구독해 저장한다. app은 DB에 직접 쓰지 않는다.
+DB 파일: `data/logs/pet.db` (`dashboard.db_path`). 기본은 노트북 `python -m app` 한 프로그램 안에서 대시보드 모듈(`dashboard/app/store.py`)이 저장한다. 도커로 띄울 때만 dashboard가 MQTT를 구독해 저장한다. 모의 실행(`--mock`)은 `data/mock/pet.db`, `data/mock/captures/`에 따로 저장한다.
+나중에 Supabase로 옮길 때는 `Store`와 같은 메서드를 가진 저장 클래스를 추가해 바꿔 끼운다 (테이블은 아래 두 개, 사진은 Storage 버킷).
 
 ```sql
 CREATE TABLE events (
@@ -15,6 +16,20 @@ CREATE TABLE events (
 );
 CREATE INDEX idx_events_ts ON events(ts);
 CREATE INDEX idx_events_type ON events(type);
+```
+
+```sql
+-- 판정 사진 (재학습용). JUDGMENT 이벤트에 img가 있으면 함께 들어간다
+CREATE TABLE captures (
+  id       INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id INTEGER,            -- events.id
+  ts       TEXT NOT NULL,
+  bottle   INTEGER,
+  img      TEXT NOT NULL,      -- 병 사진 (사진 폴더 기준 경로)
+  full     TEXT,               -- 전체 화면 사진
+  pred_cls TEXT, conf REAL, code TEXT, trigger TEXT,
+  label    TEXT NOT NULL DEFAULT ''   -- 사람이 확인한 정답: 4클래스 / exclude / '' (미확인)
+);
 ```
 
 - `pet/state`는 화면 표시용이라 저장하지 않는다(최신 값만 메모리).
@@ -57,9 +72,15 @@ CREATE INDEX idx_events_type ON events(type);
 - 재배포가 제한된 이미지(AI Hub 등)는 저장소에 올리지 않는다. 출처·라이선스는 manifest에 반드시 적는다.
 - 파일 이름 규칙: `출처_병번호_순번.jpg` (출처 `P` 휴대폰, `W` 벨트 웹캠, `O` 온라인). 한글·공백 금지.
 
+### 벨트 촬영 사진 (자동 저장)
+
+- 라인이 판정할 때마다 `vision.capture_dir`(기본 `data/captures/`)에 날짜 폴더로 저장한다: `YYYYMMDD/W_YYYYMMDD-HHMMSS_<병id>_crop.jpg`(병 사진, 레터박스 전) + `..._full.jpg`(전체 화면). 깃허브에 올리지 않는다(`.gitignore`).
+- 병 번호를 모르므로 시각과 app 병 id를 이름에 쓴다. `group`(같은 병 묶음)은 사람이 정리할 때 채운다.
+- 대시보드 "촬영 사진"에서 정답을 고르면 `captures.label`에 저장되고, `/api/captures.csv`로 manifest와 같은 열의 목록을 받는다(`source=belt`, `license=team`). 학습에서 뺄 사진은 `exclude` → `removed=review`.
+
 ## 4. 사진 전처리 규칙 (학습·판정 공통)
 
-- 판정 구역(ROI)만 자른다: `vision.roi`.
+- 판정 구역(ROI)만 자른다: `vision.roi`. 웹캠 감지로 병 박스를 찾았으면 박스 둘레 정사각형(`vision.crop_margin`)을 자른다(`vision.crop_mode: box`, `preprocess.crop_box`). 온라인 학습 사진(병 둘레로 자른 사진)과 구도를 맞추기 위해서다.
 - 비율 유지 + 224×224 회색 레터박스: `vision.letterbox_color`.
 - 학습과 판정은 **같은 함수**(`vision/bottle/preprocess.py`)를 쓴다.
 - 색이 정답 정보이므로 색조 증강 금지(`hsv_h=0`), RandAugment·무작위 지우기(`erasing=0`) 금지.

@@ -39,10 +39,9 @@ pip install -r requirements-dev.txt      # 시험·모의 실행용 (가벼움)
 pip install -r requirements-hw.txt       # 실제 하드웨어 실행용 (웹캠·YOLO·MediaPipe)
 pytest                                   # 시험 (하드웨어 없이)
 ruff check .                             # 스타일 검사
-docker compose up -d                     # mqtt + dashboard
-docker compose --profile mock up         # 하드웨어 없이 가짜 이벤트까지
-python -m app                            # 실제 하드웨어로 통합 실행
-python -m app --mock                     # 노트북에서 모의 실행
+python -m app --mock                     # 하드웨어 없이 모의 실행 (라인 + 대시보드 http://localhost:8000)
+python -m app                            # 웹캠 + YOLO 통합 실행 (우노 포트 없으면 가상 벨트)
+docker compose up -d                     # (선택) 도커로 mqtt + dashboard 따로
 ```
 
 ## 폴더 지도
@@ -53,11 +52,12 @@ python -m app --mock                     # 노트북에서 모의 실행
 | `config/` | settings.yaml |
 | `common/` | 규격을 코드로 옮긴 공통 모듈 (protocol, config) |
 | `hardware/` | 손 1~4 micro:bit 프로그램 (MakeCode) |
-| `safety/` | 아두이노 벨트·안전 펌웨어 |
+| `safety/` | 아두이노 벨트·안전 펌웨어 (통합본, 우노에 올리는 것) |
+| `code/` | 제어 담당이 만든 micro:bit 프로그램 (`code/CLAUDE.md`), 예전 벨트 펌웨어(참고용) |
 | `vision/` | bottle(YOLO 판정), card(WonderCam 안내), gesture(MediaPipe) |
 | `communication/` | 게이트웨이 micro:bit, 노트북 시리얼 연결 |
-| `app/` | 노트북 통합 실행(상태 머신), 모의 모드 |
-| `dashboard/` | 웹 대시보드 컨테이너 (FastAPI + SQLite) |
+| `app/` | 노트북 통합 실행(상태 머신, 가상 벨트, 대시보드 같이 띄움), 모의 모드 |
+| `dashboard/` | 웹 대시보드 (FastAPI + SQLite, app 안에서 실행. 도커는 선택) |
 | `infra/mqtt/` | MQTT 브로커 컨테이너 |
 | `training/` | 학습 노트북, manifest, 가중치 |
 | `tests/` | pytest 시험 |

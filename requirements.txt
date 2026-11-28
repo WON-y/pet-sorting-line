@@ -3,3 +3,6 @@ pyyaml>=6.0
 pillow>=10.0
 paho-mqtt>=2.0
 pyserial>=3.5
+# 대시보드를 노트북 app 안에서 같이 띄움 (도커 없이)
+fastapi>=0.110
+uvicorn>=0.29

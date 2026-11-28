@@ -13,25 +13,29 @@
 | 통신: 게이트웨이 | `communication/gateway_microbit` | 게이트웨이 micro:bit | MakeCode | 아니오 |
 | 통신: 시리얼·MQTT 연결 | `communication/serial_bridge` | 노트북 | Python | 아니오 (USB) |
 | 통합 실행 | `app` | 노트북 | Python | 모의 모드만 |
-| 웹 대시보드 | `dashboard` | 도커 | Python FastAPI + HTML/JS | 예 |
-| 메시지 브로커 | `infra/mqtt` | 도커 | mosquitto | 예 |
+| 웹 대시보드 | `dashboard` | 노트북 (app 안에서 같이 실행) | Python FastAPI + HTML/JS | 선택 |
+| 메시지 브로커 | `infra/mqtt` | 도커 (선택) | mosquitto | 선택 |
 | 학습 | `training` | Colab | Python | 아니오 |
 | 공통 규격 코드 | `common` | 노트북, 도커 | Python | 포함됨 |
 
-**도커에 넣지 않는 이유:** 웹캠과 USB 시리얼(micro:bit, 우노)은 윈도우·맥 도커에서 연결이 어렵다. 하드웨어를 만지는 프로그램은 노트북에서 직접 실행하고, 결과만 MQTT로 도커에 보낸다.
+**기본은 도커 없이 노트북 한 프로그램이다 (2026-11-26).** `python -m app`이 웹캠 판정, 상태 머신, 대시보드 웹 서버, SQLite 기록을 함께 돌린다. 웹캠과 USB 시리얼은 윈도우·맥 도커에서 연결이 어렵기 때문에 하드웨어 쪽은 원래 도커에 넣지 않는다.
+
+도커가 필요한 경우 (선택):
+- CI의 도커 연동 시험 (`.github/workflows/ci.yml`의 docker 작업)을 유지할 때
+- 대시보드를 라인 노트북과 다른 컴퓨터에서 따로 계속 띄워 둘 때 (MQTT로 연결)
+- 나중에 Supabase를 **내 컴퓨터에서** 흉내 내 개발할 때 (`supabase start`는 도커 필요). 클라우드 Supabase만 쓰면 도커는 필요 없다.
 
 ## 2. 전체 흐름
 
 ```
-                 ┌──────────────── 노트북 (직접 실행) ────────────────┐
-웹캠 ──────────▶ │ vision/bottle ─┐                                   │
-웹캠2(선택) ───▶ │ vision/gesture ┼─▶ app (상태 머신) ─▶ MQTT 발행 ───┼──▶ [도커] mqtt ─▶ [도커] dashboard ─▶ SQLite
-게이트웨이 USB ◀▶│ serial_bridge ─┘        │                          │
-우노 USB ◀──────▶│                         └─ 우노 명령(GO, SPD, ARM)  │
-                 └────────────────────────────────────────────────────┘
+                 ┌──────────────── 노트북: python -m app (한 프로그램) ────────────────┐
+웹캠 ──────────▶ │ vision/bottle (도착 감지·판정) ─┐                                    │
+웹캠2(선택) ───▶ │ vision/gesture ─────────────────┼─▶ app (상태 머신) ─▶ dashboard ─▶ SQLite + data/captures
+게이트웨이 USB ◀▶│ serial_bridge (분기 켤 때) ─────┘      │            (웹 http://localhost:8000)
+우노 USB ◀──────▶│                                        └─ 우노 명령(PAUSE, GO, HOLD)   │
+                 └─────────────────────────────────────────────────────────────────────┘
 게이트웨이 micro:bit ──라디오── 손 1·2·3·4
-게이트웨이 ──P0·P1──▶ 우노 ◀── IR 커튼·IR 도착·리셋 버튼     12V ─ 비상정지 ─ 릴레이 ─ TB6600 ─ 벨트
-           ◀──P2────
+게이트웨이 ──P0·P1 모드, P2 하트비트──▶ 우노 ◀── 리셋 버튼, (선택) IR 도착     12V ─ 비상정지 ─ 릴레이 ─ TB6600 ─ 벨트
 ```
 
 ## 3. 도커 컨테이너
@@ -47,9 +51,8 @@
 ## 4. 실행 순서 (시연)
 
 1. 비상정지 버튼이 눌려 있지 않은지, 바닥 테이프와 IR 커튼 위치 확인
-2. `docker compose up -d` (mqtt, dashboard)
-3. 손 1~4, 게이트웨이 micro:bit 전원 켜기 → 모두 `RDY`
-4. 노트북에서 `python -m app` (시리얼 포트는 `.env`)
-5. 우노 전원 → 켜진 직후는 STOP
-6. 카드 1 + 리셋 버튼 → 운전 시작
-7. 브라우저에서 `http://localhost:8000` 대시보드 확인
+2. 손 1~4, 게이트웨이 micro:bit 전원 켜기
+3. 우노 전원 → 켜진 직후는 STOP (잠김)
+4. 노트북에서 `python -m app` (우노 포트는 `.env`의 `ARDUINO_PORT`) → 브라우저 `http://localhost:8000`
+5. 대시보드에서 판정 구역 그리기 → 빈 벨트일 때 "빈 벨트 기준 저장"
+6. 수신호·카드 1 + 리셋 버튼 → 운전 시작

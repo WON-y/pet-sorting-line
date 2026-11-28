@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>휴대폰 카메라</title>
+<style>
+  :root{--bg:#111;--text:#f2f2f2;--muted:#a3a8b0;--ok:#3fb27f;--bad:#f0645a;--accent:#4d7ef0}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;background:var(--bg);color:var(--text)}
+  main{max-width:720px;margin:0 auto;padding:14px 16px}
+  h1{font-size:18px;margin:4px 0 10px}
+  video{width:100%;display:block;background:#000;border-radius:8px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+  button,select{font:inherit;font-size:15px;padding:10px 14px;border-radius:8px;border:1px solid #444;background:#222;color:var(--text)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  #lamp{display:inline-block;width:12px;height:12px;border-radius:50%;background:#666;margin-right:6px;vertical-align:middle}
+  .msg{font-size:14px;color:var(--muted);line-height:1.6}
+  #status{font-weight:700}
+</style>
+</head>
+<body>
+<main>
+  <h1>페트병 라인 — 휴대폰 카메라</h1>
+  <video id="video" playsinline muted autoplay></video>
+  <div class="row">
+    <button class="primary" id="startBtn">카메라 켜고 보내기</button>
+    <button id="stopBtn" disabled>멈춤</button>
+    <select id="facing"><option value="environment">후면 카메라</option><option value="user">전면 카메라</option></select>
+  </div>
+  <div><span id="lamp"></span><span id="status">대기</span></div>
+  <div class="msg" id="detail"></div>
+  <div class="msg" style="margin-top:12px">
+    휴대폰을 <b>삼각대·거치대에 고정</b>해 벨트를 내려다보게 두세요. 손으로 들면 화면 전체가 흔들려 병 감지가 되지 않습니다.<br>
+    이 화면을 켜 둔 채로 두세요 (다른 앱으로 가거나 화면이 꺼지면 보내기가 멈춥니다).
+  </div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const key=new URLSearchParams(location.search).get("k")||"";
+let cfg={send_width:1280,jpeg_quality:0.85,interval_ms:100};
+let stream=null,running=false,sent=0,t0=0,wakeLock=null;
+const canvas=document.createElement("canvas");
+
+function setStatus(text,color){$("status").textContent=text;$("lamp").style.background=color||"#666";}
+
+async function loadConfig(){
+  const r=await fetch("/phone/config?k="+encodeURIComponent(key));
+  if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(j.detail||"주소가 맞지 않습니다");}
+  cfg=await r.json();
+}
+
+async function start(){
+  if(!window.isSecureContext||!navigator.mediaDevices){setStatus("이 주소에서는 카메라를 쓸 수 없습니다 (https 필요)","var(--bad)");return;}
+  try{
+    await loadConfig();
+    stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:$("facing").value},
+      width:{ideal:cfg.send_width},height:{ideal:Math.round(cfg.send_width*9/16)}}});
+    $("video").srcObject=stream;await $("video").play();
+  }catch(e){setStatus("카메라를 켜지 못했습니다: "+e.message,"var(--bad)");return;}
+  try{wakeLock=await navigator.wakeLock?.request("screen");}catch(e){}
+  running=true;sent=0;t0=performance.now();
+  $("startBtn").disabled=true;$("stopBtn").disabled=false;$("facing").disabled=true;
+  loop();
+}
+
+function stop(){
+  running=false;
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
+  try{wakeLock?.release();}catch(e){}
+  wakeLock=null;
+  $("startBtn").disabled=false;$("stopBtn").disabled=true;$("facing").disabled=false;
+  setStatus("멈춤");
+}
+
+function snap(){
+  const v=$("video");
+  if(!v.videoWidth) return Promise.resolve(null);
+  const scale=Math.min(1,cfg.send_width/v.videoWidth);
+  canvas.width=Math.round(v.videoWidth*scale);canvas.height=Math.round(v.videoHeight*scale);
+  canvas.getContext("2d").drawImage(v,0,0,canvas.width,canvas.height);
+  return new Promise(res=>canvas.toBlob(res,"image/jpeg",cfg.jpeg_quality));
+}
+
+// 한 장 보내고 응답을 받은 뒤 다음 장 (밀리지 않게)
+async function loop(){
+  while(running){
+    try{
+      const blob=await snap();
+      if(blob){
+        const r=await fetch("/phone/frame?k="+encodeURIComponent(key),{method:"POST",headers:{"Content-Type":"image/jpeg"},body:blob});
+        if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(j.detail||r.statusText);}
+        sent++;
+        const fps=sent/((performance.now()-t0)/1000);
+        setStatus("보내는 중","var(--ok)");
+        $("detail").textContent=`${canvas.width}×${canvas.height} · ${sent}장 · 초당 ${fps.toFixed(1)}장 · ${(blob.size/1024).toFixed(0)}KB`;
+      }
+    }catch(e){
+      setStatus("보내기 실패: "+e.message,"var(--bad)");
+      await new Promise(r=>setTimeout(r,1000));
+    }
+    await new Promise(r=>setTimeout(r,cfg.interval_ms));
+  }
+}
+
+$("startBtn").addEventListener("click",start);
+$("stopBtn").addEventListener("click",stop);
+document.addEventListener("visibilitychange",async()=>{   // 화면이 다시 보이면 화면 꺼짐 방지를 다시 요청
+  if(document.visibilityState==="visible"&&running){try{wakeLock=await navigator.wakeLock?.request("screen");}catch(e){}}
+});
+if(!key) setStatus("주소에 토큰이 없습니다. 대시보드의 QR을 다시 찍으세요","var(--bad)");
+</script>
+</body>
+</html>

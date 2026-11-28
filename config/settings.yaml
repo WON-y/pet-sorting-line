@@ -2,7 +2,7 @@
 # 키를 추가·변경하면 docs/spec/config.md 표도 같이 고칩니다.
 
 radio:
-  group: 37                 # micro:bit 라디오 그룹 (다른 팀과 겹치면 변경)
+  group: 73                 # micro:bit 라디오 그룹. code/microbit 손 4대·게이트웨이 RADIO_GROUP과 같게 (다른 팀과 겹치면 모두 변경)
 
 serial:
   gateway_port: ""          # 예: COM5, /dev/ttyACM0 (비우면 .env의 GATEWAY_PORT 사용)
@@ -16,12 +16,38 @@ mqtt:
 
 vision:
   camera_index: 1           # USB 웹캠 (0번은 노트북 내장 카메라)
-  weights: training/weights/best.pt
+  camera_size: [1920, 1080] # 웹캠 해상도 요청 (지원 안 하면 웹캠이 가능한 값으로)
+  model_mode: split         # split: 색 모델 + 라벨 모델 따로 (기본) / single: 4클래스 모델 하나(weights)
+  color_model:              # 투명(clear) / 유색(color)
+    weights: training/weights/color_best.pt
+    names: {}               # 모델 클래스 이름이 clear·color가 아니면 {모델이름: clear 또는 color}
+  label_model:              # 라벨 있음(label) / 없음(nolabel)
+    weights: training/weights/label_best.pt
+    names: {}               # 모델 클래스 이름이 label·nolabel이 아니면 {모델이름: label 또는 nolabel}
+  weights: training/weights/best.pt   # single일 때 쓰는 예전 4클래스 모델 (webtest도 사용)
   roi: null                 # [x1, y1, x2, y2] 판정 구역. 벨트 설치 후 정함. null이면 화면 전체
   imgsz: 224
   letterbox_color: [114, 114, 114]   # 전처리 코드의 회색 값과 반드시 같게
   frames: 1                 # 벨트가 멈춘 뒤 1프레임 판정 (흔들림 없음)
   conf_threshold: 0.6       # 미만이면 재검사(RE)
+  video_file: ""            # 웹캠 대신 녹화 영상으로 시험할 때 경로 (벨트가 멈추면 영상도 멈춤)
+  crop_mode: box            # box: 감지한 병 둘레를 잘라 판정 / roi: 판정 구역 전체로 판정
+  crop_margin: 0.20         # box 자르기 여백 (병 크기 대비). 투명 병은 넉넉히
+  capture_dir: data/captures   # 판정 사진 저장 폴더 (재학습용, 깃허브에 올리지 않음)
+  detect:                   # 웹캠 병 도착 감지 (빈 벨트 기준 사진과 비교, vision/bottle/detect.py)
+    diff_thresh: 40         # 기준 사진과 밝기 차이가 이 값 이상이면 '변한 픽셀'
+    min_area_frac: 0.03     # 판정 구역 대비 이 비율 이상인 덩어리만 물체로 봄
+    edge_margin: 10         # 물체가 구역 가장자리에서 이 픽셀 이상 떨어져야 '완전히 들어옴'
+    stable_frames: 5        # 완전히 들어온 상태가 연속 몇 프레임이면 벨트를 멈출지
+    clear_frames: 10        # 판정 뒤 구역이 이 프레임 동안 비어야 다음 병을 받음
+
+phone:                      # 웹캠 대신 휴대폰 카메라 (python -m app --phone, vision/bottle/phone.py)
+  port: 8443                # 휴대폰이 접속하는 https 포트 (같은 와이파이에 열림. 대시보드와 따로)
+  host_ip: ""               # QR에 넣을 노트북 주소. 비우면 자동 (주소가 여러 개라 안 맞을 때만 적음)
+  send_width: 1280          # 휴대폰이 보내는 사진 폭 (px)
+  jpeg_quality: 0.85        # 휴대폰이 보내는 JPEG 화질 (0~1)
+  interval_ms: 100          # 한 장 보내고 다음 장까지 쉬는 시간
+  timeout_ms: 2000          # 이 시간 동안 사진이 안 오면 '끊김' (도착 감지를 멈춤)
 
 webtest:                    # 휴대폰·웹캠 사진 인식 웹 테스트 (vision/webtest, 시험용)
   port: 8100                # 대시보드(8000)와 겹치지 않게
@@ -37,10 +63,19 @@ safety:                     # 우노·손 3 펌웨어에도 같은 값을 넣는
   warn_distance_cm: 40
   stop_distance_cm: 20
   heartbeat_period_ms: 200
-  heartbeat_timeout_ms: 1000
-  arm_valid_ms: 5000
+  heartbeat_timeout_ms: 600 # 우노 하트비트 끊김 판정 (게이트웨이가 0.1초마다 토글)
 
 app:
+  record: local             # local: 노트북 하나에서 SQLite에 바로 기록 / mqtt: 도커 대시보드로 MQTT 발행 (환경 변수 RECORD)
+  sorting: false            # true: 판정을 게이트웨이로 보내 손 1·2가 분기 (실제 손으로 시험하기 전이라 끔)
+  settle_ms: 400            # 벨트를 멈춘 뒤 사진을 찍기까지 기다리는 시간 (흔들림 방지)
+  resume_delay_ms: 2000     # 판정 뒤 벨트를 자동으로 다시 출발시키기까지 시간
   ack_timeout_ms: 1500
   sort_hold_ms: 1200        # 날개판을 연 채 유지하는 시간
   state_publish_ms: 1000
+
+dashboard:
+  host: 127.0.0.1           # 같은 와이파이의 다른 기기에서 보려면 0.0.0.0 (시험 버튼도 열리므로 주의)
+  port: 8000
+  db_path: data/logs/pet.db # SQLite 기록 파일 (환경 변수 DB_PATH)
+  preview_ms: 200           # 대시보드 실시간 화면 갱신 간격
