@@ -53,8 +53,15 @@
 | `safety.heartbeat_timeout_ms` | 600 | 우노 | 게이트웨이가 0.1초마다 토글 |
 | `app.record` | local | app | `local` SQLite 바로 기록 / `mqtt` 도커 대시보드로 발행 (`RECORD`) |
 | `app.sorting` | false | app | 판정을 손 1·2에 보내 분기할지 |
-| `app.settle_ms` | 400 | app | 벨트 멈춘 뒤 촬영까지 대기 |
-| `app.resume_delay_ms` | 2000 | app | 판정 뒤 자동 출발까지 대기 |
+| `app.stop_to_judge` | false | app | false: 벨트를 멈추지 않고 판정 / true: 예전처럼 멈추고 판정 |
+| `app.settle_ms` | 400 | app | (`stop_to_judge: true`) 벨트 멈춘 뒤 촬영까지 대기 |
+| `app.resume_delay_ms` | 2000 | app | (`stop_to_judge: true`) 판정 뒤 자동 출발까지 대기 |
+| `app.flow.speed_mm_s` | {N: null, S: null} | app | 벨트 속도 mm/초 (보통·저속). 실측 |
+| `app.flow.hand1_mm` / `hand2_mm` | null | app | 판정 구역 들어오는 쪽 가장자리 → 손 1·2 날개판 앞끝. 실측 |
+| `app.flow.flap_mm` | null | app | 날개판이 벨트를 따라 차지하는 길이. 실측 |
+| `app.flow.bottle_mm` | 250 | app | 가장 긴 병 길이 |
+| `app.flow.flap_ms` | 400 | app, 손 1·2 | 날개판 회전 시간 (`WRIST_MOVE_MS`) |
+| `app.flow.margin_ms` | 300 | app | 전송·라디오 지연 여유 |
 | `app.ack_timeout_ms` | 1500 | app | 손 ACK 대기 |
 | `app.sort_hold_ms` | 1200 | 손 1·2 | 날개판 유지 시간 |
 | `dashboard.host` | 127.0.0.1 | app | 다른 기기에서 보려면 0.0.0.0 (시험 버튼도 열림) |

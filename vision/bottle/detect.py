@@ -1,11 +1,11 @@
 """웹캠 병 도착 감지 (docs/spec/modes_and_states.md 5절).
 
 빈 벨트 기준 사진과 지금 화면을 비교해, 판정 구역 안에 물체가 '완전히' 들어왔는지 본다.
-- 완전히 들어온 상태가 `stable_frames` 이상 이어지는 동안 arrived (벨트 멈춤 신호)
+- 완전히 들어온 상태가 `stable_frames` 이상 이어지는 동안 arrived (그 프레임으로 판정)
 - 구역이 `clear_frames` 이상 비어 있는 동안 cleared (다음 병을 받을 준비)
 두 값은 '지금 그런 상태인가'를 매 프레임 알려 준다. 한 병을 한 번만 판정하는 일은 app 상태 머신이 맡는다.
 
-정지 경로가 아니다. 판정을 위해 벨트를 잠깐 세우는 용도다 (안전 정지는 우노·센서·전선).
+정지 경로가 아니다 (안전 정지는 우노·센서·전선).
 OpenCV·numpy는 ArrivalDetector를 쓸 때만 import 한다 (모의 실행·CI를 가볍게).
 """
 from __future__ import annotations
