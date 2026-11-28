@@ -37,6 +37,11 @@
 | `vision.detect.edge_margin` | 10 | vision/bottle/detect | 가장자리에서 떨어져야 하는 픽셀 |
 | `vision.detect.stable_frames` | 5 | vision/bottle/detect | 완전히 들어온 상태가 이만큼 이어지면 멈춤 |
 | `vision.detect.clear_frames` | 10 | vision/bottle/detect | 구역이 이만큼 비어야 다음 병 |
+| `vision.detect.baseline_s` | 20 | vision/bottle/detect | 빈 벨트 기준 만들기(벨트가 돌 때): 모으는 시간. 벨트가 한 바퀴 이상 돌 시간 |
+| `vision.detect.baseline_frames` | 60 | vision/bottle/detect | 그동안 모을 사진 수 |
+| `vision.detect.verify_s` | 10 | vision/bottle/detect | 만든 뒤 빈 벨트로 오감지를 세는 시간 |
+| `vision.detect.tol_extra` | 10 | vision/bottle/detect | 자리별 허용치 = 모으는 동안 그 자리가 흔들린 최대값(손·병이 찍힌 사진은 뺌) + 이 값 |
+| `vision.detect.tol_min` | 25 | vision/bottle/detect | 자리별 허용치 최소값. `diff_thresh`는 1장 기준일 때만 |
 | `phone.port` | 8443 | app (`--phone`) | 휴대폰 카메라 https 포트 (0.0.0.0, 같은 와이파이) |
 | `phone.host_ip` | "" | app | QR에 넣을 노트북 주소. 비우면 자동 |
 | `phone.send_width` | 1280 | 휴대폰 페이지 | 휴대폰이 보내는 사진 폭 |

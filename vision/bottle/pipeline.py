@@ -5,7 +5,7 @@
   capture()             (전체 사진, 병 사진, 박스) — PIL 이미지, 레터박스 전
   classify(bottle)      (4클래스, 신뢰도, 세부) — 세부: 색·라벨 모델 각각의 결과
   preview_jpeg(text)    대시보드 실시간 화면용 JPEG (판정 구역·박스 표시)
-  set_baseline() / set_roi(roi) / info()
+  set_baseline(moving) / set_roi(roi) / info()   moving=True면 여러 장 기준 (벨트가 돌 때)
 OpenCV·ultralytics는 이 파일을 쓸 때만 필요하다 (requirements-hw.txt).
 """
 from __future__ import annotations
@@ -40,10 +40,7 @@ class CameraVision:
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
         self.frame_period = 1.0 / (self.cap.get(cv2.CAP_PROP_FPS) or 30) if self.is_file else 0.0
         self._next_frame_at = 0.0
-        d = vcfg.get("detect", {})
-        self.detector = ArrivalDetector(vcfg.get("roi"), d.get("diff_thresh", 40), d.get("min_area_frac", 0.03),
-                                        d.get("edge_margin", 10), d.get("stable_frames", 5),
-                                        d.get("clear_frames", 10))
+        self.detector = ArrivalDetector.from_config(vcfg)
         self.frame = None
         self.det = Detection("NO_BASELINE")
         self._clf = None
@@ -75,8 +72,13 @@ class CameraVision:
         return self.det
 
     # ---- 설정 ----
-    def set_baseline(self) -> None:
-        self.detector.set_baseline(self.frame)
+    def set_baseline(self, moving: bool = False) -> None:
+        """빈 벨트 기준. 벨트가 돌면 여러 장(vision.detect.baseline_s 동안), 멈춰 있으면 지금 화면 1장."""
+        if moving:
+            d = self.vcfg.get("detect", {})
+            self.detector.start_learning(d.get("baseline_s", 20), d.get("baseline_frames", 60), d.get("verify_s", 10))
+        else:
+            self.detector.set_baseline(self.frame)
 
     def set_roi(self, roi) -> None:
         if roi:
@@ -93,6 +95,7 @@ class CameraVision:
         w, h = self.size()
         return {"source": str(self.source), "mock": False, "width": w, "height": h,
                 "roi": self.detector.roi, "baseline": self.detector.baseline is not None,
+                "learning": self.detector.learning_info(), "baseline_check": self.detector.check,
                 "detect": self.det.status, "box": self.det.box, "model": model_status(self.vcfg)}
 
     # ---- 촬영·판정 ----

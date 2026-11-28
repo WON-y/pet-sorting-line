@@ -96,7 +96,10 @@ def test_line_actions_with_sim_belt(dash, tmp_path):
     try:
         client = TestClient(dash.app)
         assert client.post("/api/line/reset").json()["result"] == "OK"
+        assert client.post("/api/line/baseline").json()["result"] == "LEARNING"   # 벨트가 돌면 여러 장
+        assert client.get("/api/line").json()["vision"]["baseline_check"]["kind"] == "multi"
         assert client.post("/api/line/mode", json={"mode": 3}).status_code == 200
+        assert client.post("/api/line/baseline").json()["result"] == "SINGLE"     # 멈춰 있으면 1장
         assert belt.run == "STOP"
         assert client.post("/api/line/reset").json()["result"] == "MODE_NOT_1_OR_2"
         assert client.post("/api/line/roi", json={"roi": [10, 10, 300, 300]}).status_code == 200

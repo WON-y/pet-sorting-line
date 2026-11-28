@@ -83,7 +83,7 @@
           1. 휴대폰을 노트북과 <b>같은 와이파이</b>에 연결하고 QR을 찍습니다.<br>
           2. "안전하지 않음" 경고가 뜨면 <b>고급 → 계속</b> (노트북이 만든 시험용 인증서).<br>
           3. "카메라 켜고 보내기" → 카메라 허용. 휴대폰은 거치대에 <b>고정</b>하세요.<br>
-          4. 화면이 들어오면 "빈 벨트 기준 저장".<br>
+          4. 화면이 들어오면 벨트를 비우고 돌린 채로 "빈 벨트 기준 만들기".<br>
           <select id="phoneUrlSel" class="hide" style="margin-top:6px;font:inherit;font-size:12.5px"></select>
           <div id="phoneUrl" style="word-break:break-all;margin-top:4px"></div>
         </div>
@@ -103,7 +103,7 @@
       </div>
       <div class="btns">
         <button class="danger" data-act="hold">정지 (HOLD)</button>
-        <button data-act="baseline" title="병·손이 없는 빈 벨트일 때 누르기">빈 벨트 기준 저장</button>
+        <button data-act="baseline" title="벨트를 비우고 돌린 채로 누르면 20초 동안 모아 만들고 10초 확인. 벨트가 멈춰 있으면 지금 화면 1장으로 저장">빈 벨트 기준 만들기</button>
         <button id="roiBtn">판정 구역 그리기</button>
         <button data-act="roi-clear">판정 구역 초기화</button>
         <button data-act="capture">지금 촬영</button>
@@ -140,7 +140,7 @@ const COLORS={AUTO:"#2e7d5a",SLOW:"#d4a017",WARN:"#d4a017",PAUSE:"#b42318",LOCKO
 const NAMES={AUTO:"자동 운전",SLOW:"저속",WARN:"접근 경고",PAUSE:"일시 정지",LOCKOUT:"점검 잠금",STOP:"위험 정지"};
 const LINE_NAMES={IDLE:"병 기다림",SETTLE:"멈추는 중",CAPTURE:"촬영·판정",WAIT_ACK:"게이트웨이 응답 대기",
   RESUME_WAIT:"곧 출발",LEAVE:"병이 빠지길 기다림"};
-const DETECT_NAMES={NO_BASELINE:"빈 벨트 기준 없음",EMPTY:"비어 있음",EDGE:"가장자리에 걸침",INSIDE:"완전히 들어옴"};
+const DETECT_NAMES={NO_BASELINE:"빈 벨트 기준 없음",LEARNING:"빈 벨트 기준 만드는 중",EMPTY:"비어 있음",EDGE:"가장자리에 걸침",INSIDE:"완전히 들어옴"};
 const LATCH_NAMES={POWERON:"전원 켬",HB:"하트비트 끊김",MODE:"모드 정지·잠금",ESTOP:"비상정지",HOLD:"HOLD",IR:"IR 커튼"};
 const CLASS_NAMES={clear_nolabel:"투명·라벨 없음",clear_label:"투명·라벨 있음",color_nolabel:"유색·라벨 없음",color_label:"유색·라벨 있음"};
 const $=id=>document.getElementById(id);
@@ -185,7 +185,13 @@ async function refreshLine(){
     $("simBtns").classList.toggle("hide",!b.sim);
     $("visionInfo").textContent=`${vinfo.mock?"모의 화면":vinfo.source} · ${vinfo.width}×${vinfo.height} · ${vinfo.model||""}`;
     let m=`감지: ${DETECT_NAMES[vinfo.detect]||vinfo.detect}`;
-    if(!vinfo.baseline) m+=" — 병이 없는 빈 벨트에서 '빈 벨트 기준 저장'을 누르세요";
+    if(!vinfo.baseline && !vinfo.learning) m+=" — 벨트를 비우고 돌린 채로 '빈 벨트 기준 만들기'를 누르세요";
+    const L=vinfo.learning, C=vinfo.baseline_check;
+    if(L) m+=L.phase==="collect"?` — 모으는 중 ${L.frames}장, ${L.left_s}초 남음 (벨트 위에 아무것도 두지 마세요)`:` — 확인 중, ${L.left_s}초 남음`;
+    else if(C&&C.kind==="multi") m+=C.ok?` · 기준 OK (확인 ${C.frames}프레임 오감지 0)`
+      :(C.false?` · ⚠ 기준 확인에서 오감지 ${C.false}/${C.frames}: 조명·그림자를 확인하고 다시 만드세요`
+      :` · ⚠ 모으는 동안 물체가 ${C.excluded}/${C.collected}장에 찍힘: 벨트를 비우고 다시 만드세요`);
+    else if(C&&C.kind==="single") m+=" · 기준: 화면 1장 (벨트가 돌 때 다시 만들면 더 정확)";
     m+=vinfo.roi?` · 판정 구역 [${vinfo.roi.join(", ")}] (settings.yaml vision.roi에 적어 두면 다음에도 씀)`:" · 판정 구역: 화면 전체";
     if(b.run==="STOP" && b.sim) m+=" · 벨트가 잠겨 있습니다: 모드 1·2에서 '리셋 버튼'을 누르면 출발";
     if(s.error) m+=` · ⚠ ${s.error}`;
@@ -236,7 +242,7 @@ document.querySelectorAll("button[data-act]").forEach(btn=>btn.addEventListener(
     if(act==="mode") r=await post("/api/line/mode",{mode:Number(btn.dataset.mode)});
     else if(act==="roi-clear") r=await post("/api/line/roi",{roi:null});
     else r=await post("/api/line/"+act);
-    const msgs={reset:{OK:"출발했습니다",MODE_NOT_1_OR_2:"모드가 1·2가 아니라서 출발하지 않습니다",NOT_LATCHED:"이미 잠김이 아닙니다"}};
+    const msgs={baseline:{LEARNING:"빈 벨트 기준을 만드는 중입니다 (약 30초, 벨트를 비워 두세요)",SINGLE:"벨트가 멈춰 있어 지금 화면 1장으로 저장했습니다"},reset:{OK:"출발했습니다",MODE_NOT_1_OR_2:"모드가 1·2가 아니라서 출발하지 않습니다",NOT_LATCHED:"이미 잠김이 아닙니다"}};
     $("ctlMsg").textContent=(msgs[act]&&msgs[act][r.result])||"완료: "+btn.textContent;
   }catch(e){$("ctlMsg").textContent="안 됨: "+e.message;}
   refreshLine();

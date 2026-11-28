@@ -71,10 +71,7 @@ class PhoneVision(CameraVision):
         self.feed = feed
         self.source = "phone"
         self.is_file = False
-        d = vcfg.get("detect", {})
-        self.detector = ArrivalDetector(vcfg.get("roi"), d.get("diff_thresh", 40), d.get("min_area_frac", 0.03),
-                                        d.get("edge_margin", 10), d.get("stable_frames", 5),
-                                        d.get("clear_frames", 10))
+        self.detector = ArrivalDetector.from_config(vcfg)
         w, h = vcfg.get("camera_size", [1280, 720])
         self.frame = np.zeros((int(h), int(w), 3), np.uint8)   # 휴대폰이 붙기 전 빈 화면
         self.has_frame = False
@@ -98,10 +95,10 @@ class PhoneVision(CameraVision):
         return self.det
 
     # ---- 설정 ----
-    def set_baseline(self) -> None:
+    def set_baseline(self, moving: bool = False) -> None:
         if not self.feed.connected():
             raise ValueError("휴대폰 카메라가 연결되지 않았습니다 (대시보드 QR로 접속)")
-        super().set_baseline()
+        super().set_baseline(moving)
 
     def info(self) -> dict:
         return super().info() | {"phone": self.feed.info()}

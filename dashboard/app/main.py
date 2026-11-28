@@ -201,8 +201,10 @@ def line_action(action: str, body: Annotated[dict | None, Body()] = None) -> dic
 
     sim = r.is_sim
     try:
-        if action == "baseline":
-            r.call(r.vision.set_baseline)
+        if action == "baseline":   # 벨트가 돌면 여러 장 기준 (vision.detect.baseline_s), 멈춰 있으면 1장
+            moving = r.call(lambda: r.ctl.belt == "RUN")
+            r.call(lambda: r.vision.set_baseline(moving))
+            return {"ok": True, "result": "LEARNING" if moving else "SINGLE"}
         elif action == "roi":
             roi = body.get("roi")
             if roi is not None and (not isinstance(roi, list) or len(roi) != 4):

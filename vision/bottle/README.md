@@ -26,7 +26,7 @@
 | `classifier.py` | `SplitClassifier`(색 + 라벨 모델), `BottleClassifier`(4클래스 하나), `load_classifier`, `combine` (ultralytics는 사용할 때만 import) |
 | `decide.py` | 신뢰도 기준 판정 규칙 → (클래스, 판정 코드). 기본 1프레임 |
 | `camera.py` | OpenCV 웹캠 읽기 (RGB) |
-| `detect.py` | 웹캠 병 도착 감지 (`ArrivalDetector`, 하드웨어 없이 시험하는 `StreakCounter`) |
+| `detect.py` | 웹캠 병 도착 감지 (`ArrivalDetector`, 하드웨어 없이 시험하는 `StreakCounter`). 빈 벨트 기준: 벨트가 돌 때 여러 장 → 자리별 허용치 (`start_learning`), 멈춰 있을 때 1장 (`set_baseline`) |
 | `pipeline.py` | `CameraVision` — 웹캠·녹화 영상 → 감지 → 촬영 → 판정 → 대시보드 미리보기 (app이 사용) |
 | `phone.py` | `PhoneVision` — 웹캠 대신 휴대폰 카메라 사진으로 같은 일 (`python -m app --phone`, `app/README.md`) |
 
@@ -37,7 +37,14 @@
 - 촬영 환경: 판정 구역 둘레에 가림막을 세우고, 정면 조명과 측면 조명을 비교해 하나로 고정한다.
 - 카메라 높이·각도·노출·조명을 바꾸면 다시 학습(미세조정)한다.
 - 색이 정답 정보이므로 색조 변경·무작위 지우기 증강은 쓰지 않는다.
-- 시험: `tests/test_vision.py` (모델 없이 전처리·판정 규칙 확인)
+- 시험: `tests/test_vision.py` (모델 없이 전처리·판정 규칙 확인), `tests/test_detect.py` (도착 감지·빈 벨트 기준)
+
+## 빈 벨트 사진 (`data/belt_empty/`, 깃허브에 올리지 않음)
+
+- 2026-11-28 빈 벨트 사진 370장 (Teachable Machine 내보내기, 224×224, 벨트를 조금씩 옮기며 찍음). 팀 공유 드라이브에서 받아 `data/belt_empty/`에 푼다.
+- 쓰임: 감지기 시험용. `pytest`가 이 폴더가 있으면 "짝수 번호로 기준을 만들고 홀수 번호로 오감지 0"을 확인하고, 없으면 건너뛴다.
+- 시연 장소의 기준으로 쓰지는 않는다. 기준은 그 자리에서 대시보드 "빈 벨트 기준 만들기"로 만든다.
+- 시험 결과 (벨트 안쪽 구역): 1장 기준(`diff_thresh` 40)은 오감지 4~9%, 반사가 심한 순간에 기준을 찍으면 75%. 여러 장 + 자리별 허용치는 0%. 오감지는 조명 반사가 심한 88~125번에 몰려 있어 조명(확산판)도 함께 손본다.
 
 ## 성능 목표 (벨트 위 사진으로만 평가)
 
